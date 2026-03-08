@@ -1,7 +1,7 @@
 # L2 Headless Client for L2J_Mobius_CT_0_Interlude
 
 Headless Lineage 2 bot client written in TypeScript. Connects to Login Server, authenticates, selects a character, and enters the game world with keepalive.
-The client is developed for the server L2J_Mobius_CT_0_Interlude.
+The client is developed for the server L2J_Mobius_CT_0_Interlude(https://gitlab.com/MobiusDevelopment/L2J_Mobius/-/tree/master/L2J_Mobius_CT_0_Interlude).
 This project is created for enthusiast developers.
 The goal of the project is to create a universal API.
 

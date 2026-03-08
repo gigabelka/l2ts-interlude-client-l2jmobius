@@ -7,10 +7,10 @@
   ],
   "author": "Viktor Belkin",
   "license": "MIT",
-  "homepage": "",
+  "homepage": "https://github.com/gigabelka/l2ts-interlude-client-l2jmobius",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/gigabelka/l2ts-interlude-client-l2jmobius"
   },
   "scripts": {
     "dev": "ts-node src/index.ts",
