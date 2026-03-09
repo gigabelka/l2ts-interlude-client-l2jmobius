@@ -19,6 +19,7 @@ This client is designed for the [L2J_Mobius CT_0_Interlude](https://gitlab.com/M
 ## Resources
 
 YouTube Channel: https://youtube.com/@lineage2interludeclientforl2jm
+
 Telegram Channel: t.me/Lineage2InterludeClientForL2jm
 
 ## Requirements
