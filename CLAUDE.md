@@ -80,7 +80,6 @@ Edit `src/config.ts` with your server settings:
 
 **IMPORTANT:** The following files are the single source of truth and **MUST NOT BE EDITED**:
 
-- `Interlude_work_sesion.md` — working sessions and traffic analysis
 - `client_server_protocol.md` — client-server protocol documentation
 
 All information about protocol, packet formats and crypto must be taken exclusively from these files. Code in `src/` must match them, not the other way around.
