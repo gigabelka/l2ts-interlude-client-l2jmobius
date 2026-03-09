@@ -1,10 +1,11 @@
-type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
+type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'SILENT';
 
 const LEVELS: Record<LogLevel, number> = {
     DEBUG: 0,
     INFO: 1,
     WARN: 2,
     ERROR: 3,
+    SILENT: 4,
 };
 
 class LoggerLevel {
@@ -117,20 +118,24 @@ export const Logger = {
     error: (tag: string, message: string): void => log('ERROR', tag, message),
 
     hexDump: (label: string, buf: Buffer, maxBytes?: number): void => {
+        if (LEVELS['DEBUG'] < LEVELS[LoggerLevel.level]) return;
         const max = maxBytes ?? 256;
         formatHexDump(buf, label, max);
     },
 
     logPacket: (direction: 'RECV' | 'SEND', opcode: number, raw: Buffer): void => {
+        if (LEVELS['DEBUG'] < LEVELS[LoggerLevel.level]) return;
         console.log(`[${direction}] OpCode=0x${opcode.toString(16).toUpperCase()}  Size=${raw.length} bytes`);
     },
 
     logKeys: (label: string, key: Buffer): void => {
+        if (LEVELS['DEBUG'] < LEVELS[LoggerLevel.level]) return;
         const hex = formatHexBytes(key);
         console.log(`[KEYS] ${label}: ${hex}`);
     },
 
     logCrypto: (op: string, before: Buffer, after: Buffer): void => {
+        if (LEVELS['DEBUG'] < LEVELS[LoggerLevel.level]) return;
         const max = 16;
         const beforeDump = before.slice(0, Math.min(before.length, max));
         const afterDump = after.slice(0, Math.min(after.length, max));
@@ -140,6 +145,7 @@ export const Logger = {
     },
 
     logCryptoSingle: (op: string, data: Buffer, maxBytes?: number): void => {
+        if (LEVELS['DEBUG'] < LEVELS[LoggerLevel.level]) return;
         const max = maxBytes !== undefined ? maxBytes : 16;
         const dump = data.slice(0, Math.min(data.length, max));
 
@@ -147,6 +153,7 @@ export const Logger = {
     },
 
     logState: (from: string, to: string): void => {
+        if (LEVELS['DEBUG'] < LEVELS[LoggerLevel.level]) return;
         console.log(`[STATE] ${from} -> ${to}`);
     },
 };

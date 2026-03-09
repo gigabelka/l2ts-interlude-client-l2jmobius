@@ -311,6 +311,20 @@ npm run dev
 
 Requires Node.js 20+.
 
+### Running Modes
+
+#### Development (Silent)
+```bash
+npm run dev
+```
+Runs silently — no console output. Use for normal operation.
+
+#### Debug
+```bash
+npm run debug
+```
+Runs with full debug output — all packet logs, state transitions, hex dumps, etc.
+
 ---
 
 ## Debugging Tips

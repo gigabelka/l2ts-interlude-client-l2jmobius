@@ -1,6 +1,6 @@
 {
   "name": "l2ts-interlude-client-l2jmobius",
-  "version": "0.1.37",
+  "version": "0.1.38",
   "chronicle": "Interlude",
   "protocols": [
     746
@@ -13,7 +13,8 @@
     "url": "https://github.com/gigabelka/l2ts-interlude-client-l2jmobius"
   },
   "scripts": {
-    "dev": "ts-node src/index.ts",
+    "dev": "cross-env LOG_LEVEL=SILENT ts-node src/index.ts",
+    "debug": "cross-env LOG_LEVEL=DEBUG ts-node src/index.ts",
     "build": "tsc",
     "commit": "node scripts/bump-version.js && git add -A && git commit"
   },
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.3.5",
+    "cross-env": "^10.1.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"

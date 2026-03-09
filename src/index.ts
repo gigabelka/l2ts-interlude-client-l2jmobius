@@ -4,7 +4,8 @@ import { LoginClient } from './login/LoginClient';
 import { GameClient } from './game/GameClient';
 import type { SessionData } from './login/types';
 
-Logger.level = 'DEBUG';
+const logLevel = process.env.LOG_LEVEL?.toUpperCase() || 'ERROR';
+Logger.level = logLevel as 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
 Logger.info('MAIN', '='.repeat(60));
 Logger.info('MAIN', 'L2 Headless Client — Interlude CT0');
