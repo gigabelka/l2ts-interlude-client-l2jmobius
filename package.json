@@ -1,6 +1,6 @@
 {
   "name": "l2ts-interlude-client-l2jmobius",
-  "version": "0.1.38",
+  "version": "0.1.39",
   "chronicle": "Interlude",
   "protocols": [
     746
@@ -15,15 +15,26 @@
   "scripts": {
     "dev": "cross-env LOG_LEVEL=SILENT ts-node src/index.ts",
     "debug": "cross-env LOG_LEVEL=DEBUG ts-node src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run copy:dashboard",
+    "copy:dashboard": "node -e \"const fs=require('fs'), path=require('path'); function copyDir(src,dest){if(!fs.existsSync(dest))fs.mkdirSync(dest,{recursive:true});fs.readdirSync(src).forEach(item=>{const s=path.join(src,item),d=path.join(dest,item);if(fs.statSync(s).isDirectory())copyDir(s,d);else fs.copyFileSync(s,d);});} copyDir('src/dashboard','dist/dashboard'); console.log('Dashboard files copied to dist/dashboard');\"",
     "commit": "node scripts/bump-version.js && git add -A && git commit"
   },
   "dependencies": {
     "@upstash/context7-mcp": "^2.1.3",
-    "egads": "^1.0.2"
+    "cors": "^2.8.6",
+    "egads": "^1.0.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "helmet": "^8.1.0",
+    "ws": "^8.19.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/helmet": "^0.0.48",
     "@types/node": "^25.3.5",
+    "@types/ws": "^8.18.1",
     "cross-env": "^10.1.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

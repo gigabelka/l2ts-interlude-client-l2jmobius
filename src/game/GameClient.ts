@@ -14,6 +14,8 @@ import { AuthRequest } from './packets/outgoing/AuthRequest';
 import { GameCrypt } from './GameCrypt';
 import { CONFIG } from '../config';
 import { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
+import { GameStateStore } from '../core/GameStateStore';
+import { EventBus } from '../core/EventBus';
 
 export class GameClient extends Connection {
     private state: GameState = GameState.IDLE;
@@ -30,6 +32,17 @@ export class GameClient extends Connection {
         Logger.logState(this.state, GameState.CONNECTING);
         Logger.info('GameClient', `Connecting to Game Server: ${this.session.gameServerIp}:${this.session.gameServerPort}`);
         this.state = GameState.CONNECTING;
+        
+        // Update connection state
+        GameStateStore.updateConnection({
+            phase: 'GAME_CONNECTING',
+            gameServer: { 
+                connected: false, 
+                host: this.session.gameServerIp, 
+                port: this.session.gameServerPort 
+            }
+        });
+        
         this.connect(this.session.gameServerIp, this.session.gameServerPort);
     }
 
@@ -37,17 +50,48 @@ export class GameClient extends Connection {
         Logger.info('GameClient', 'Connected to Game Server');
         Logger.logState(this.state, GameState.WAIT_CRYPT_INIT);
         this.state = GameState.WAIT_CRYPT_INIT;
+        
         const pv = new ProtocolVersion();
         this.sendPacketRawBuffer(pv.encode());
     }
 
     protected onClose(): void {
         Logger.info('GameClient', '*** GAME SERVER CONNECTION CLOSED ***');
+        
+        GameStateStore.updateConnection({
+            phase: 'DISCONNECTED',
+            gameServer: { connected: false, host: '', port: 0 }
+        });
+        
+        EventBus.emitEvent({
+            type: 'system.disconnected',
+            channel: 'system',
+            data: {
+                reason: 'Connection closed',
+                phase: 'DISCONNECTED',
+                willReconnect: false
+            },
+            timestamp: new Date().toISOString()
+        });
     }
 
     protected onError(err: Error): void {
         Logger.error('GameClient', `*** GAME SERVER ERROR: ${err.message} ***`);
         this.state = GameState.ERROR;
+        
+        GameStateStore.updateConnection({
+            phase: 'ERROR'
+        });
+        
+        EventBus.emitEvent({
+            type: 'system.error',
+            channel: 'system',
+            data: {
+                code: 'GAME_CONNECTION_ERROR',
+                message: err.message
+            },
+            timestamp: new Date().toISOString()
+        });
     }
 
     protected onRawPacket(fullPacket: Buffer): void {
@@ -124,6 +168,48 @@ export class GameClient extends Connection {
                     Logger.info('GameClient', `ENTERED GAME WORLD AS: ${p.name}`);
                     Logger.logState(this.state, GameState.IN_GAME);
                     this.state = GameState.IN_GAME;
+                    
+                    // Update GameStateStore with character info
+                    GameStateStore.updateCharacter({
+                        objectId: p.objectId,
+                        name: p.name,
+                        level: p.level,
+                        position: { x: p.x, y: p.y, z: p.z }
+                    });
+                    
+                    GameStateStore.updateConnection({
+                        phase: 'IN_GAME',
+                        gameServer: { 
+                            connected: true, 
+                            host: this.session.gameServerIp, 
+                            port: this.session.gameServerPort 
+                        }
+                    });
+                    
+                    // Emit connected event
+                    EventBus.emitEvent({
+                        type: 'system.connected',
+                        channel: 'system',
+                        data: {
+                            phase: 'IN_GAME',
+                            characterName: p.name,
+                            serverId: CONFIG.ServerId
+                        },
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Emit position changed event
+                    EventBus.emitEvent({
+                        type: 'movement.position_changed',
+                        channel: 'movement',
+                        data: {
+                            objectId: p.objectId,
+                            position: { x: p.x, y: p.y, z: p.z },
+                            speed: 0,
+                            isRunning: false
+                        },
+                        timestamp: new Date().toISOString()
+                    });
                 }
                 break;
             }
@@ -132,8 +218,11 @@ export class GameClient extends Connection {
                 if (opcode === 0xD3) {
                     const p = packet as NetPingRequestPacket;
                     Logger.debug('GameClient', `pingId=${p.pingId} -> Pong`);
-                    this.sendPacketRawBuffer(Buffer.from([0xA8, p.pingId])); // Not sure if ping should be encrypted
+                    this.sendPacketRawBuffer(Buffer.from([0xA8, p.pingId]));
                 }
+                
+                // TODO: Handle more packets (NPC info, combat, chat, etc.)
+                // and update GameStateStore accordingly
                 break;
             }
 
