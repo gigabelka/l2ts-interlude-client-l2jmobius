@@ -23,3 +23,16 @@ export const API_CONFIG = {
         combatLimit: 5, // 5 combat commands per second
     }
 } as const;
+
+// Dashboard Configuration
+export const DASHBOARD_CONFIG = {
+    enabled: true,
+    title: '🎮 L2 Bot Dashboard',
+    refreshInterval: 2000,  // Status polling interval (ms)
+    wsReconnect: {
+        initialDelay: 1000,     // Initial reconnect delay (ms)
+        maxDelay: 30000,        // Maximum reconnect delay (ms)
+        multiplier: 2,          // Exponential backoff multiplier
+    },
+    theme: 'dark' as const,
+} as const;

@@ -1,16 +1,32 @@
 /**
  * WebSocket Client for L2 Bot Dashboard
+ * Features: Auto-reconnect with exponential backoff, channel subscription, event dispatching
  */
 
 class L2WsClient extends EventTarget {
     constructor(url = null) {
         super();
-        this.url = url || `ws://${window.location.host}/ws?token=demo`;
+        this.url = url || this.buildWsUrl();
         this.ws = null;
-        this.reconnectInterval = 5000;
+        
+        // Reconnect configuration with exponential backoff
+        this.reconnectDelay = 1000;      // Initial delay: 1 second
+        this.maxReconnectDelay = 30000;  // Maximum delay: 30 seconds
+        this.reconnectMultiplier = 2;    // Double the delay each time
         this.reconnectTimer = null;
-        this.subscribedChannels = ['system', 'character', 'combat'];
+        this.shouldReconnect = true;     // Flag to prevent reconnect after manual disconnect
+        
+        this.subscribedChannels = ['system', 'character', 'combat', 'world'];
         this.isConnected = false;
+        this.connectionAttempts = 0;
+    }
+
+    /**
+     * Build WebSocket URL from current location
+     */
+    buildWsUrl() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        return `${protocol}//${window.location.host}/ws`;
     }
 
     /**
@@ -18,18 +34,26 @@ class L2WsClient extends EventTarget {
      */
     connect() {
         if (this.ws?.readyState === WebSocket.OPEN) {
-            console.log('WebSocket already connected');
+            console.log('[WS] Already connected');
             return;
         }
 
-        console.log('Connecting to WebSocket:', this.url);
+        if (this.ws?.readyState === WebSocket.CONNECTING) {
+            console.log('[WS] Connection already in progress');
+            return;
+        }
+
+        this.connectionAttempts++;
+        console.log(`[WS] Connecting to ${this.url} (attempt ${this.connectionAttempts})`);
         
         try {
             this.ws = new WebSocket(this.url);
             
             this.ws.onopen = (event) => {
-                console.log('WebSocket connected');
+                console.log('[WS] Connected');
                 this.isConnected = true;
+                this.connectionAttempts = 0;
+                this.resetReconnectDelay();
                 this.clearReconnectTimer();
                 
                 // Subscribe to channels
@@ -44,29 +68,36 @@ class L2WsClient extends EventTarget {
                     const message = JSON.parse(event.data);
                     this.handleMessage(message);
                 } catch (error) {
-                    console.error('Failed to parse WebSocket message:', error);
+                    console.error('[WS] Failed to parse message:', error);
+                    this.dispatchEvent(new CustomEvent('error', { 
+                        detail: { type: 'parse_error', error, raw: event.data }
+                    }));
                 }
             };
 
             this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
+                console.error('[WS] Error:', error);
                 this.dispatchEvent(new CustomEvent('error', { detail: error }));
             };
 
             this.ws.onclose = (event) => {
-                console.log('WebSocket closed:', event.code, event.reason);
+                console.log(`[WS] Closed: code=${event.code}, reason=${event.reason || 'none'}`);
                 this.isConnected = false;
                 this.dispatchEvent(new CustomEvent('disconnected', { detail: event }));
                 
-                // Auto-reconnect
-                if (!this.reconnectTimer) {
+                // Auto-reconnect with exponential backoff
+                if (this.shouldReconnect && !this.reconnectTimer) {
                     this.scheduleReconnect();
                 }
             };
 
         } catch (error) {
-            console.error('Failed to create WebSocket:', error);
-            this.scheduleReconnect();
+            console.error('[WS] Failed to create connection:', error);
+            this.dispatchEvent(new CustomEvent('error', { detail: error }));
+            
+            if (this.shouldReconnect) {
+                this.scheduleReconnect();
+            }
         }
     }
 
@@ -74,10 +105,15 @@ class L2WsClient extends EventTarget {
      * Handle incoming message
      */
     handleMessage(message) {
-        // Dispatch event for all messages
+        // Handle pong
+        if (message.type === 'pong') {
+            this.dispatchEvent(new CustomEvent('pong', { detail: message }));
+        }
+        
+        // Dispatch generic message event
         this.dispatchEvent(new CustomEvent('message', { detail: message }));
         
-        // Dispatch typed event
+        // Dispatch typed event based on message type
         if (message.type) {
             this.dispatchEvent(new CustomEvent(message.type, { detail: message.data }));
         }
@@ -88,14 +124,17 @@ class L2WsClient extends EventTarget {
                 detail: message 
             }));
         }
+        
+        // Dispatch 'any' event for catch-all listeners
+        this.dispatchEvent(new CustomEvent('any', { detail: message }));
     }
 
     /**
      * Send message to server
      */
     send(type, data = null) {
-        if (!this.isConnected) {
-            console.warn('WebSocket not connected');
+        if (!this.isConnected || !this.ws) {
+            console.warn('[WS] Not connected, cannot send message');
             return false;
         }
 
@@ -106,7 +145,7 @@ class L2WsClient extends EventTarget {
             this.ws.send(JSON.stringify(message));
             return true;
         } catch (error) {
-            console.error('Failed to send message:', error);
+            console.error('[WS] Failed to send message:', error);
             return false;
         }
     }
@@ -120,6 +159,7 @@ class L2WsClient extends EventTarget {
         
         if (this.isConnected) {
             this.send('subscribe', { channels });
+            console.log('[WS] Subscribed to channels:', channels);
         }
     }
 
@@ -142,13 +182,15 @@ class L2WsClient extends EventTarget {
     }
 
     /**
-     * Disconnect from server
+     * Disconnect from server (no auto-reconnect)
      */
     disconnect() {
+        console.log('[WS] Disconnecting (no reconnect)');
+        this.shouldReconnect = false;
         this.clearReconnectTimer();
         
         if (this.ws) {
-            this.ws.close();
+            this.ws.close(1000, 'Client disconnect');
             this.ws = null;
         }
         
@@ -156,17 +198,27 @@ class L2WsClient extends EventTarget {
     }
 
     /**
-     * Schedule reconnect
+     * Schedule reconnect with exponential backoff
      */
     scheduleReconnect() {
         if (this.reconnectTimer) return;
+        if (!this.shouldReconnect) return;
         
-        console.log(`Scheduling reconnect in ${this.reconnectInterval}ms`);
+        console.log(`[WS] Reconnecting in ${this.reconnectDelay}ms...`);
+        this.dispatchEvent(new CustomEvent('reconnecting', { 
+            detail: { delay: this.reconnectDelay, attempt: this.connectionAttempts + 1 }
+        }));
         
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
             this.connect();
-        }, this.reconnectInterval);
+        }, this.reconnectDelay);
+        
+        // Exponential backoff: double the delay for next time (up to max)
+        this.reconnectDelay = Math.min(
+            this.reconnectDelay * this.reconnectMultiplier,
+            this.maxReconnectDelay
+        );
     }
 
     /**
@@ -177,6 +229,13 @@ class L2WsClient extends EventTarget {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
         }
+    }
+
+    /**
+     * Reset reconnect delay to initial value
+     */
+    resetReconnectDelay() {
+        this.reconnectDelay = 1000;
     }
 
     /**
@@ -192,6 +251,20 @@ class L2WsClient extends EventTarget {
             case WebSocket.CLOSED: return 'CLOSED';
             default: return 'UNKNOWN';
         }
+    }
+
+    /**
+     * Get connection info
+     */
+    getInfo() {
+        return {
+            status: this.status,
+            isConnected: this.isConnected,
+            url: this.url,
+            subscribedChannels: [...this.subscribedChannels],
+            reconnectDelay: this.reconnectDelay,
+            connectionAttempts: this.connectionAttempts
+        };
     }
 }
 

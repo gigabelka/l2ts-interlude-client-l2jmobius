@@ -20,6 +20,7 @@ import skillsRouter from './routes/skills';
 import chatRouter from './routes/chat';
 import partyRouter from './routes/party';
 import connectionRouter from './routes/connection';
+import socialRouter from './routes/social';
 
 export class ApiServer {
     private app: Application;
@@ -33,9 +34,33 @@ export class ApiServer {
     }
 
     private setupMiddleware(): void {
-        // Security
+        // Security - CSP configured to allow Scalar CDN
         this.app.use(helmet({
-            contentSecurityPolicy: false, // Disable CSP for API
+            contentSecurityPolicy: {
+                directives: {
+                    defaultSrc: ["'self'"],
+                    scriptSrc: [
+                        "'self'",
+                        "cdn.jsdelivr.net",
+                        "unpkg.com",
+                        "'unsafe-inline'",
+                        "'unsafe-eval'"
+                    ],
+                    styleSrc: [
+                        "'self'",
+                        "cdn.jsdelivr.net",
+                        "unpkg.com",
+                        "'unsafe-inline'"
+                    ],
+                    connectSrc: [
+                        "'self'",
+                        "ws://localhost:*",
+                        "wss://localhost:*"
+                    ],
+                    imgSrc: ["'self'", "data:", "blob:", "https:"],
+                    fontSrc: ["'self'", "cdn.jsdelivr.net", "unpkg.com"]
+                }
+            }
         }));
 
         // CORS
@@ -57,11 +82,23 @@ export class ApiServer {
     private setupRoutes(): void {
         // Dashboard static files (no auth required)
         const dashboardPath = path.join(__dirname, '..', 'dashboard');
-        this.app.use(express.static(dashboardPath));
+        this.app.use(express.static(dashboardPath, {
+            maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0
+        }));
+        
+        // OpenAPI spec endpoint
+        this.app.get('/openapi.json', (req: Request, res: Response) => {
+            res.sendFile(path.join(dashboardPath, 'openapi.json'));
+        });
         
         // Dashboard routes - serve index.html for all dashboard routes
-        this.app.get(['/', '/api-docs', '/inventory', '/combat'], (req: Request, res: Response) => {
+        this.app.get(['/', '/inventory', '/combat'], (req: Request, res: Response) => {
             res.sendFile(path.join(dashboardPath, 'index.html'));
+        });
+        
+        // API Docs (Scalar) - separate HTML file
+        this.app.get('/api-docs', (req: Request, res: Response) => {
+            res.sendFile(path.join(dashboardPath, 'api-docs.html'));
         });
 
         // Health check (no auth required)
@@ -88,6 +125,7 @@ export class ApiServer {
         apiRouter.use('/chat', chatRouter);
         apiRouter.use('/party', partyRouter);
         apiRouter.use('/connect', connectionRouter);
+        apiRouter.use('/social', socialRouter);
 
         // Mount API v1
         this.app.use('/api/v1', apiRouter);

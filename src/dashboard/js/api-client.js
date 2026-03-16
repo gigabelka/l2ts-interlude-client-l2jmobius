@@ -61,11 +61,11 @@ class L2ApiClient {
     }
 
     async disconnect() {
-        return this.request('POST', '/disconnect');
+        return this.request('POST', '/connect/disconnect');
     }
 
     async reconnect(delayMs = 3000) {
-        return this.request('POST', '/reconnect', { delayMs });
+        return this.request('POST', '/connect/reconnect', { delayMs });
     }
 
     // ==================== Character ====================
@@ -127,6 +127,16 @@ class L2ApiClient {
 
     async stopAttack() {
         return this.request('POST', '/combat/stop');
+    }
+
+    // ==================== Target ====================
+    
+    async nextTarget() {
+        return this.request('POST', '/target/next');
+    }
+
+    async getCurrentTarget() {
+        return this.request('GET', '/target');
     }
 
     // ==================== Nearby ====================

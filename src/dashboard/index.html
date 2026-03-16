@@ -24,6 +24,9 @@
                 </ul>
                 <ul>
                     <li><a href="#" class="nav-link active" data-tab="dashboard">Dashboard</a></li>
+                    <li><a href="#" class="nav-link" data-tab="ws-monitor">
+                        <i data-lucide="radio" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> WS Monitor
+                    </a></li>
                     <li><a href="#" class="nav-link" data-tab="api-docs">API Docs</a></li>
                     <li><a href="#" class="nav-link" data-tab="inventory">Inventory</a></li>
                     <li><a href="#" class="nav-link" data-tab="combat">Combat Log</a></li>
@@ -129,6 +132,9 @@
                         <div class="quick-actions">
                             <button id="btn-attack" class="action-btn" disabled>
                                 <i data-lucide="sword"></i> Attack
+                            </button>
+                            <button id="btn-next-target" class="action-btn" disabled>
+                                <i data-lucide="scan-eye"></i> Next Target
                             </button>
                             <button id="btn-pickup" class="action-btn" disabled>
                                 <i data-lucide="hand"></i> Pickup
@@ -238,6 +244,147 @@
                     </div>
                 </article>
             </section>
+
+            <!-- WebSocket Monitor Tab -->
+            <section id="tab-ws-monitor" class="tab-content">
+                <div class="grid">
+                    <!-- WS Connection Status -->
+                    <article class="panel">
+                        <header>
+                            <h3><i data-lucide="radio"></i> Connection Status</h3>
+                            <div class="header-actions">
+                                <button id="ws-btn-connect" class="small">Connect</button>
+                                <button id="ws-btn-disconnect" class="secondary small">Disconnect</button>
+                            </div>
+                        </header>
+                        <div class="ws-status-grid">
+                            <div class="ws-stat">
+                                <label>Status</label>
+                                <span id="ws-status-text" class="ws-badge disconnected">DISCONNECTED</span>
+                            </div>
+                            <div class="ws-stat">
+                                <label>URL</label>
+                                <code id="ws-url" class="ws-code">--</code>
+                            </div>
+                            <div class="ws-stat">
+                                <label>Latency</label>
+                                <span id="ws-latency">-- ms</span>
+                            </div>
+                            <div class="ws-stat">
+                                <label>Reconnect Attempts</label>
+                                <span id="ws-reconnect-count">0</span>
+                            </div>
+                            <div class="ws-stat">
+                                <label>Uptime</label>
+                                <span id="ws-uptime">--</span>
+                            </div>
+                            <div class="ws-stat">
+                                <label>Messages</label>
+                                <span id="ws-msg-count">0</span>
+                            </div>
+                        </div>
+                    </article>
+
+                    <!-- WS Statistics -->
+                    <article class="panel">
+                        <header>
+                            <h3><i data-lucide="bar-chart-2"></i> Message Statistics</h3>
+                            <button id="ws-reset-stats" class="secondary small">Reset</button>
+                        </header>
+                        <div class="ws-stats">
+                            <div class="ws-stat-row">
+                                <span class="ws-channel-badge system">System</span>
+                                <span id="ws-count-system" class="ws-count">0</span>
+                            </div>
+                            <div class="ws-stat-row">
+                                <span class="ws-channel-badge character">Character</span>
+                                <span id="ws-count-character" class="ws-count">0</span>
+                            </div>
+                            <div class="ws-stat-row">
+                                <span class="ws-channel-badge combat">Combat</span>
+                                <span id="ws-count-combat" class="ws-count">0</span>
+                            </div>
+                            <div class="ws-stat-row">
+                                <span class="ws-channel-badge chat">Chat</span>
+                                <span id="ws-count-chat" class="ws-count">0</span>
+                            </div>
+                            <div class="ws-stat-row">
+                                <span class="ws-channel-badge world">World</span>
+                                <span id="ws-count-world" class="ws-count">0</span>
+                            </div>
+                            <div class="ws-stat-row total">
+                                <span>Total Messages</span>
+                                <span id="ws-count-total" class="ws-count">0</span>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="grid">
+                    <!-- Channel Subscriptions -->
+                    <article class="panel">
+                        <header>
+                            <h3><i data-lucide="list"></i> Subscribed Channels</h3>
+                        </header>
+                        <div id="ws-channels" class="ws-channels">
+                            <div class="ws-channel-tag">system</div>
+                            <div class="ws-channel-tag">character</div>
+                            <div class="ws-channel-tag">combat</div>
+                            <div class="ws-channel-tag">world</div>
+                        </div>
+                        <hr>
+                        <div class="ws-subscribe-form">
+                            <input type="text" id="ws-channel-input" placeholder="Enter channel name...">
+                            <button id="ws-subscribe-btn" class="small">Subscribe</button>
+                            <button id="ws-unsubscribe-btn" class="secondary small">Unsubscribe</button>
+                        </div>
+                    </article>
+
+                    <!-- Test Message -->
+                    <article class="panel">
+                        <header>
+                            <h3><i data-lucide="send"></i> Send Test Message</h3>
+                        </header>
+                        <div class="ws-test-form">
+                            <select id="ws-test-type">
+                                <option value="ping">Ping</option>
+                                <option value="subscribe">Subscribe</option>
+                                <option value="unsubscribe">Unsubscribe</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                            <input type="text" id="ws-test-data" placeholder='{"key": "value"}'>
+                            <button id="ws-send-btn" class="small">Send</button>
+                        </div>
+                        <small class="ws-hint">Select "Custom" to send JSON data</small>
+                    </article>
+                </div>
+
+                <!-- Raw Message Log -->
+                <article class="panel ws-raw-panel">
+                    <header>
+                        <h3><i data-lucide="terminal"></i> Raw Message Log</h3>
+                        <div class="header-actions">
+                            <label class="ws-toggle">
+                                <input type="checkbox" id="ws-auto-scroll" checked>
+                                <span>Auto-scroll</span>
+                            </label>
+                            <select id="ws-raw-filter" class="filter-select small">
+                                <option value="all">All</option>
+                                <option value="in">Inbound</option>
+                                <option value="out">Outbound</option>
+                            </select>
+                            <button id="ws-clear-raw" class="secondary small">Clear</button>
+                        </div>
+                    </header>
+                    <div id="ws-raw-log" class="ws-raw-log">
+                        <div class="ws-raw-entry info">
+                            <span class="ws-raw-time">--:--:--</span>
+                            <span class="ws-raw-direction">[INFO]</span>
+                            <span class="ws-raw-data">WebSocket Monitor initialized. Waiting for connection...</span>
+                        </div>
+                    </div>
+                </article>
+            </section>
         </main>
 
         <!-- Footer -->
@@ -256,6 +403,7 @@
     <script src="/js/components/status-panel.js"></script>
     <script src="/js/components/event-log.js"></script>
     <script src="/js/components/combat-controls.js"></script>
+    <script src="/js/components/ws-monitor.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

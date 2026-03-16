@@ -16,7 +16,9 @@
     "dev": "cross-env LOG_LEVEL=SILENT ts-node src/index.ts",
     "debug": "cross-env LOG_LEVEL=DEBUG ts-node src/index.ts",
     "build": "tsc && npm run copy:dashboard",
-    "copy:dashboard": "node -e \"const fs=require('fs'), path=require('path'); function copyDir(src,dest){if(!fs.existsSync(dest))fs.mkdirSync(dest,{recursive:true});fs.readdirSync(src).forEach(item=>{const s=path.join(src,item),d=path.join(dest,item);if(fs.statSync(s).isDirectory())copyDir(s,d);else fs.copyFileSync(s,d);});} copyDir('src/dashboard','dist/dashboard'); console.log('Dashboard files copied to dist/dashboard');\"",
+    "copy:dashboard": "node scripts/copy-dashboard.js",
+    "start": "node dist/index.js",
+    "dev:dashboard": "npm run dev",
     "commit": "node scripts/bump-version.js && git add -A && git commit"
   },
   "dependencies": {

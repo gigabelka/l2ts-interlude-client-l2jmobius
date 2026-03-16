@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L2 Bot API Documentation</title>
+    
+    <!-- Pico.css -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css">
+    
+    <style>
+        :root[data-theme="dark"] {
+            --l2-primary: #c9a227;
+            --l2-bg-dark: #1a1a1a;
+            --l2-bg-panel: #252525;
+            --l2-border: #3a3a3a;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+        }
+        
+        header {
+            background: var(--l2-bg-panel);
+            border-bottom: 1px solid var(--l2-border);
+            padding: 0.75rem 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            color: var(--l2-primary);
+            font-weight: 600;
+            font-size: 1.1rem;
+            text-decoration: none;
+        }
+        
+        .back-link {
+            color: var(--l2-primary);
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        
+        /* Scalar container */
+        #scalar-container {
+            height: calc(100vh - 60px);
+            overflow: auto;
+        }
+        
+        /* Loading state */
+        .loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--l2-primary);
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--l2-border);
+            border-top-color: var(--l2-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="/" class="logo">🎮 L2 Bot Dashboard</a>
+            <a href="/" class="back-link">← Back to Dashboard</a>
+        </nav>
+    </header>
+    
+    <div id="scalar-container">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading API Documentation...</p>
+        </div>
+    </div>
+
+    <!-- Scalar API Reference -->
+    <script>
+        (function() {
+            const container = document.getElementById('scalar-container');
+            
+            // Scalar configuration
+            const config = {
+                url: '/openapi.json',
+                theme: 'kepler',
+                layout: 'modern',
+                hideDarkModeToggle: false,
+                defaultHttpClient: {
+                    targetKey: 'js',
+                    clientKey: 'fetch'
+                },
+                hideModels: false,
+                hideDownloadButton: false
+            };
+            
+            // Create and load Scalar script
+            const script = document.createElement('script');
+            script.id = 'api-reference';
+            script.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.25.0/dist/browser/standalone.js';
+            script.dataset.configuration = JSON.stringify(config);
+            
+            script.onload = function() {
+                console.log('[Scalar] API documentation loaded');
+            };
+            
+            script.onerror = function() {
+                container.innerHTML = `
+                    <div style="padding: 2rem; text-align: center; color: #f44336;">
+                        <h3>Failed to load API documentation</h3>
+                        <p>Please check your internet connection or try refreshing the page.</p>
+                        <p style="margin-top: 1rem;">
+                            <a href="/openapi.json" target="_blank" style="color: #c9a227;">
+                                View OpenAPI JSON directly
+                            </a>
+                        </p>
+                    </div>
+                `;
+            };
+            
+            // Clear loading and append script
+            container.innerHTML = '';
+            container.appendChild(script);
+        })();
+    </script>
+</body>
+</html>
