@@ -1,5 +1,6 @@
 import Connection from '../network/Connection';
 import { Logger } from '../logger/Logger';
+import { EventBus } from '../core/EventBus';
 import { LoginCrypt } from './LoginCrypt';
 import { LoginPacketHandler } from './LoginPacketHandler';
 import { LoginState, type SessionData, type LoginConfig } from './types';
@@ -76,6 +77,20 @@ export class LoginClient extends Connection {
 
         Logger.logPacket('RECV', opcode, fullPacket);
         Logger.hexDump('RECV DECRYPTED', decrypted);
+
+        // Emit raw packet event for WebSocket
+        EventBus.emitEvent({
+            type: 'system.raw_packet',
+            channel: 'system',
+            data: {
+                opcode: opcode,
+                opcodeHex: `0x${opcode.toString(16).padStart(2, '0')}`,
+                length: decrypted.length,
+                state: `LOGIN_${this.state}`,
+                source: 'login_server'
+            },
+            timestamp: new Date().toISOString()
+        });
 
         const packet = this.handler.handle(opcode, decrypted);
         if (packet) this.handlePacket(packet, opcode);

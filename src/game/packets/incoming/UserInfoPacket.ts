@@ -8,9 +8,9 @@ import { EventBus } from '../../../core/EventBus';
  * UserInfo (OpCode=0x04) — full info about the player character.
  * Receiving this packet confirms the client is fully in-game.
  * 
- * L2 Interlude UserInfo structure:
+ * L2 Interlude UserInfo structure (from l2J-Mobius UserInfo.java):
  * - x, y, z (int32)
- * - heading (int32)
+ * - vehicleId (int32) - 0 if not in vehicle
  * - objectId (int32)
  * - name (UTF16 string)
  * - race (int32)
@@ -20,19 +20,19 @@ import { EventBus } from '../../../core/EventBus';
  * - exp (int64)
  * - str, dex, con, int, wit, men (int32) - stats
  * - maxHp (int32)
- * - currentHp (double/float depending on protocol)
+ * - currentHp (int32) - NOT double!
  * - maxMp (int32)
- * - currentMp (double/float)
+ * - currentMp (int32) - NOT double!
  * - sp (int32)
  * - currentLoad (int32)
  * - maxLoad (int32)
- * - etc...
+ * ... (more fields)
  */
 export class UserInfoPacket implements IncomingGamePacket {
     public x: number = 0;
     public y: number = 0;
     public z: number = 0;
-    public heading: number = 0;
+    public vehicleId: number = 0;
     public objectId: number = 0;
     public name: string = '';
     public race: number = 0;
@@ -64,7 +64,9 @@ export class UserInfoPacket implements IncomingGamePacket {
             this.x = reader.readInt32LE();
             this.y = reader.readInt32LE();
             this.z = reader.readInt32LE();
-            this.heading = reader.readInt32LE();
+            
+            // Vehicle ID (0 if not in vehicle) - THIS WAS MISSING!
+            this.vehicleId = reader.readInt32LE();
             
             // Identity
             this.objectId = reader.readInt32LE();
@@ -83,60 +85,21 @@ export class UserInfoPacket implements IncomingGamePacket {
             this.wit = reader.readInt32LE();
             this.men = reader.readInt32LE();
             
-            // HP/MP - check if we have enough bytes
-            const remaining = reader.remaining();
-            Logger.debug('UserInfoPacket', `Before HP/MP - remaining: ${remaining} bytes`);
-            
-            if (remaining >= 8) {
-                this.maxHp = reader.readInt32LE();
-            } else {
-                Logger.warn('UserInfoPacket', 'Not enough data for maxHp');
-                this.maxHp = 100;
-            }
-            
-            if (remaining >= 16) {
-                this.currentHp = reader.readDouble();
-            } else if (remaining >= 12) {
-                // Fallback to float if double not available
-                this.currentHp = reader.readInt32LE();
-            } else {
-                this.currentHp = this.maxHp;
-            }
-            
-            if (remaining >= 20) {
-                this.maxMp = reader.readInt32LE();
-            } else {
-                this.maxMp = 100;
-            }
-            
-            if (remaining >= 28) {
-                this.currentMp = reader.readDouble();
-            } else if (remaining >= 24) {
-                this.currentMp = reader.readInt32LE();
-            } else {
-                this.currentMp = this.maxMp;
-            }
+            // HP/MP/CP - In Interlude these are Int32, NOT Double!
+            // Based on l2J-Mobius UserInfo.java:
+            // buffer.writeInt(_player.getMaxHp());
+            // buffer.writeInt((int) Math.round(_player.getCurrentHp()));
+            this.maxHp = reader.readInt32LE();
+            this.currentHp = reader.readInt32LE();
+            this.maxMp = reader.readInt32LE();
+            this.currentMp = reader.readInt32LE();
             
             // SP and load
-            if (reader.remaining() >= 4) {
-                this.sp = reader.readInt32LE();
-            }
-            if (reader.remaining() >= 8) {
-                this.currentLoad = reader.readInt32LE();
-                this.maxLoad = reader.readInt32LE();
-            }
+            this.sp = reader.readInt32LE();
+            this.currentLoad = reader.readInt32LE();
+            this.maxLoad = reader.readInt32LE();
             
-            // Try to read CP if available
-            if (reader.remaining() >= 12) {
-                this.maxCp = reader.readInt32LE();
-                if (reader.remaining() >= 8) {
-                    this.currentCp = reader.readDouble();
-                } else {
-                    this.currentCp = this.maxCp;
-                }
-            }
-
-            // Skip remaining data
+            // Skip remaining data (equipment, stats, etc.)
             if (reader.remaining() > 0) {
                 Logger.debug('UserInfoPacket', `remaining: ${reader.remaining()} bytes skipped`);
                 reader.skip(reader.remaining());
@@ -144,7 +107,7 @@ export class UserInfoPacket implements IncomingGamePacket {
 
             Logger.info('UserInfoPacket',
                 `ENTERED GAME: ${this.name} (ObjectID=${this.objectId} Lvl=${this.level} Class=${this.classId} ` +
-                `HP=${Math.round(this.currentHp)}/${this.maxHp} MP=${Math.round(this.currentMp)}/${this.maxMp} ` +
+                `HP=${this.currentHp}/${this.maxHp} MP=${this.currentMp}/${this.maxMp} ` +
                 `Pos=${this.x},${this.y},${this.z})`);
 
             // Update GameStateStore with full character info
@@ -176,10 +139,10 @@ export class UserInfoPacket implements IncomingGamePacket {
             exp: this.exp,
             expPercent: expPercent,
             sp: this.sp,
-            hp: { current: Math.round(this.currentHp), max: this.maxHp },
-            mp: { current: Math.round(this.currentMp), max: this.maxMp },
-            cp: { current: Math.round(this.currentCp) || 0, max: this.maxCp || 0 },
-            position: { x: this.x, y: this.y, z: this.z, heading: this.heading },
+            hp: { current: this.currentHp, max: this.maxHp },
+            mp: { current: this.currentMp, max: this.maxMp },
+            cp: { current: this.currentCp || 0, max: this.maxCp || 0 },
+            position: { x: this.x, y: this.y, z: this.z },
             stats: {
                 str: this.str,
                 dex: this.dex,
@@ -193,27 +156,27 @@ export class UserInfoPacket implements IncomingGamePacket {
         // Emit stats changed event for real-time dashboard updates
         const eventData: any = {};
         
-        if (prevChar.hp?.current !== Math.round(this.currentHp) || prevChar.hp?.max !== this.maxHp) {
+        if (prevChar.hp?.current !== this.currentHp || prevChar.hp?.max !== this.maxHp) {
             eventData.hp = { 
-                current: Math.round(this.currentHp), 
+                current: this.currentHp, 
                 max: this.maxHp,
-                delta: Math.round(this.currentHp) - (prevChar.hp?.current || 0)
+                delta: this.currentHp - (prevChar.hp?.current || 0)
             };
         }
         
-        if (prevChar.mp?.current !== Math.round(this.currentMp) || prevChar.mp?.max !== this.maxMp) {
+        if (prevChar.mp?.current !== this.currentMp || prevChar.mp?.max !== this.maxMp) {
             eventData.mp = { 
-                current: Math.round(this.currentMp), 
+                current: this.currentMp, 
                 max: this.maxMp,
-                delta: Math.round(this.currentMp) - (prevChar.mp?.current || 0)
+                delta: this.currentMp - (prevChar.mp?.current || 0)
             };
         }
         
-        if (this.maxCp > 0 && (prevChar.cp?.current !== Math.round(this.currentCp) || prevChar.cp?.max !== this.maxCp)) {
+        if (this.maxCp > 0 && (prevChar.cp?.current !== this.currentCp || prevChar.cp?.max !== this.maxCp)) {
             eventData.cp = { 
-                current: Math.round(this.currentCp), 
+                current: this.currentCp, 
                 max: this.maxCp,
-                delta: Math.round(this.currentCp) - (prevChar.cp?.current || 0)
+                delta: this.currentCp - (prevChar.cp?.current || 0)
             };
         }
 
@@ -233,7 +196,7 @@ export class UserInfoPacket implements IncomingGamePacket {
                 channel: 'movement',
                 data: {
                     objectId: this.objectId,
-                    position: { x: this.x, y: this.y, z: this.z, heading: this.heading },
+                    position: { x: this.x, y: this.y, z: this.z },
                     speed: 0,
                     isRunning: false
                 },

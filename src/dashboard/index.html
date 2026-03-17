@@ -12,7 +12,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     
     <!-- Dashboard Styles -->
-    <link rel="stylesheet" href="/css/dashboard.css">
+    <link rel="stylesheet" href="/css/dashboard.css?v=8">
 </head>
 <body>
     <div class="container-fluid">
@@ -30,6 +30,9 @@
                     <li><a href="#" class="nav-link" data-tab="api-docs">API Docs</a></li>
                     <li><a href="#" class="nav-link" data-tab="inventory">Inventory</a></li>
                     <li><a href="#" class="nav-link" data-tab="combat">Combat Log</a></li>
+                    <li><a href="#" class="nav-link" data-tab="event-log">
+                        <i data-lucide="activity" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> Event Log
+                    </a></li>
                 </ul>
                 <ul>
                     <li>
@@ -47,146 +50,177 @@
         <main>
             <!-- Dashboard Tab -->
             <section id="tab-dashboard" class="tab-content active">
-                <div class="grid">
-                    <!-- Character Status Panel -->
-                    <article class="panel">
-                        <header>
-                            <h3><i data-lucide="user"></i> Character</h3>
-                        </header>
-                        <div id="character-info">
-                            <div class="character-header">
-                                <div class="avatar-placeholder">
-                                    <i data-lucide="user-circle" class="avatar-icon"></i>
+                <div class="dashboard-layout">
+                    <!-- Full Width Dashboard -->
+                    <div class="dashboard-content">
+                        <!-- Character Status Panel -->
+                        <article class="panel">
+                            <header>
+                                <h3><i data-lucide="user"></i> Character</h3>
+                            </header>
+                            <div id="character-info">
+                                <div class="character-header">
+                                    <div class="avatar-placeholder">
+                                        <i data-lucide="user-circle" class="avatar-icon"></i>
+                                    </div>
+                                    <div class="character-meta">
+                                        <h4 id="char-name">--</h4>
+                                        <p id="char-class">--</p>
+                                        <p id="char-level">Level --</p>
+                                    </div>
                                 </div>
-                                <div class="character-meta">
-                                    <h4 id="char-name">--</h4>
-                                    <p id="char-class">--</p>
-                                    <p id="char-level">Level --</p>
+                                
+                                <div class="stats-bars">
+                                    <div class="stat-bar">
+                                        <label>HP <span id="hp-value">--/--</span></label>
+                                        <progress id="hp-bar" value="0" max="100"></progress>
+                                    </div>
+                                    <div class="stat-bar">
+                                        <label>MP <span id="mp-value">--/--</span></label>
+                                        <progress id="mp-bar" value="0" max="100"></progress>
+                                    </div>
+                                    <div class="stat-bar">
+                                        <label>CP <span id="cp-value">--/--</span></label>
+                                        <progress id="cp-bar" value="0" max="100"></progress>
+                                    </div>
+                                    <div class="stat-bar">
+                                        <label>XP <span id="xp-value">--%</span></label>
+                                        <progress id="xp-bar" value="0" max="100"></progress>
+                                    </div>
                                 </div>
                             </div>
-                            
-                            <div class="stats-bars">
-                                <div class="stat-bar">
-                                    <label>HP <span id="hp-value">--/--</span></label>
-                                    <progress id="hp-bar" value="0" max="100"></progress>
+                        </article>
+
+                        <!-- Quick Actions -->
+                        <article class="panel">
+                            <header>
+                                <h3><i data-lucide="zap"></i> Quick Actions</h3>
+                            </header>
+                            <div class="quick-actions">
+                                <button id="btn-attack" class="action-btn" disabled>
+                                    <i data-lucide="sword"></i> Attack
+                                </button>
+                                <button id="btn-next-target" class="action-btn" disabled>
+                                    <i data-lucide="scan-eye"></i> Next Target
+                                </button>
+                                <button id="btn-pickup" class="action-btn" disabled>
+                                    <i data-lucide="hand"></i> Pickup
+                                </button>
+                                <button id="btn-sit" class="action-btn" disabled>
+                                    <i data-lucide="armchair"></i> Sit/Stand
+                                </button>
+                                <button id="btn-chat" class="action-btn" disabled>
+                                    <i data-lucide="message-square"></i> Chat
+                                </button>
+                                <button id="btn-toggle-connect" class="action-btn">
+                                    <i data-lucide="log-in"></i> Connect
+                                </button>
+                            </div>
+                        </article>
+
+                                                <!-- Target Info -->
+                        <article class="panel">
+                            <header>
+                                <h3><i data-lucide="target"></i> Target</h3>
+                            </header>
+                            <div id="target-info">
+                                <div class="target-empty">
+                                    <i data-lucide="crosshair"></i>
+                                    <p>No target selected</p>
                                 </div>
-                                <div class="stat-bar">
-                                    <label>MP <span id="mp-value">--/--</span></label>
-                                    <progress id="mp-bar" value="0" max="100"></progress>
-                                </div>
-                                <div class="stat-bar">
-                                    <label>XP <span id="xp-value">--%</span></label>
-                                    <progress id="xp-bar" value="0" max="100"></progress>
-                                </div>
-                                <div class="stat-bar">
-                                    <label>CP <span id="cp-value">--/--</span></label>
-                                    <progress id="cp-bar" value="0" max="100"></progress>
+                                <div id="target-details" class="target-details hidden">
+                                    <div class="target-header">
+                                        <h4 id="target-name">--</h4>
+                                        <span id="target-type" class="badge">--</span>
+                                    </div>
+                                    <p id="target-level">Level --</p>
+                                    <div class="stat-bar">
+                                        <label>HP <span id="target-hp-value">--/--</span></label>
+                                        <progress id="target-hp-bar" value="0" max="100"></progress>
+                                    </div>
+                                    <p id="target-distance">Distance: --m</p>
+                                    <div class="target-actions">
+                                        <button id="btn-target-attack" class="small">
+                                            <i data-lucide="sword"></i> Attack
+                                        </button>
+                                        <button id="btn-target-skill" class="small secondary">
+                                            <i data-lucide="sparkles"></i> Skill
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                            
-                            <div class="position-info">
-                                <h5><i data-lucide="map-pin"></i> Position</h5>
+                        </article>
+
+                        <!-- Movement Controls -->
+                        <article class="panel movement-panel">
+                            <header>
+                                <h3><i data-lucide="move"></i> Movement</h3>
+                            </header>
+                            <div class="movement-controls">
+                                <div class="movement-dpad">
+                                    <button id="btn-move-forward" class="movement-btn" disabled title="Вперёд (W)">
+                                        <i data-lucide="arrow-up"></i>
+                                    </button>
+                                    <div class="movement-middle-row">
+                                        <button id="btn-move-left" class="movement-btn" disabled title="Влево (A)">
+                                            <i data-lucide="arrow-left"></i>
+                                        </button>
+                                        <button id="btn-move-stop" class="movement-btn secondary" disabled title="Остановиться (S)">
+                                            <i data-lucide="octagon"></i>
+                                        </button>
+                                        <button id="btn-move-right" class="movement-btn" disabled title="Вправо (D)">
+                                            <i data-lucide="arrow-right"></i>
+                                        </button>
+                                    </div>
+                                    <button id="btn-move-backward" class="movement-btn" disabled title="Назад (X)">
+                                        <i data-lucide="arrow-down"></i>
+                                    </button>
+                                </div>
                                 <div class="coords">
                                     <span>X: <code id="pos-x">--</code></span>
                                     <span>Y: <code id="pos-y">--</code></span>
                                     <span>Z: <code id="pos-z">--</code></span>
                                 </div>
+                                <div class="movement-info">
+                                    <label class="movement-step-label">
+                                        <span>Step:</span>
+                                        <input type="range" id="movement-step" min="50" max="500" value="100" step="50">
+                                        <span id="movement-step-value">100</span>
+                                    </label>
+                                </div>
                             </div>
-                        </div>
-                    </article>
-
-                    <!-- WebSocket Event Log -->
-                    <article class="panel event-log-panel">
-                        <header>
-                            <h3><i data-lucide="activity"></i> Event Log</h3>
-                            <div class="header-actions">
-                                <select id="event-filter" class="filter-select">
-                                    <option value="all">All Events</option>
-                                    <option value="system">System</option>
-                                    <option value="character">Character</option>
-                                    <option value="combat">Combat</option>
-                                    <option value="chat">Chat</option>
-                                    <option value="world">World</option>
-                                </select>
-                                <button id="clear-events" class="secondary small">
-                                    <i data-lucide="trash-2"></i>
-                                </button>
-                            </div>
-                        </header>
-                        <div id="event-log" class="event-log">
-                            <div class="event-item system">
-                                <span class="event-time">--:--:--</span>
-                                <span class="event-channel">[system]</span>
-                                <span class="event-message">Waiting for connection...</span>
-                            </div>
-                        </div>
-                    </article>
+                        </article>
+                    </div>
                 </div>
+            </section>
 
-                <div class="grid">
-                    <!-- Quick Actions -->
-                    <article class="panel">
-                        <header>
-                            <h3><i data-lucide="zap"></i> Quick Actions</h3>
-                        </header>
-                        <div class="quick-actions">
-                            <button id="btn-attack" class="action-btn" disabled>
-                                <i data-lucide="sword"></i> Attack
-                            </button>
-                            <button id="btn-next-target" class="action-btn" disabled>
-                                <i data-lucide="scan-eye"></i> Next Target
-                            </button>
-                            <button id="btn-pickup" class="action-btn" disabled>
-                                <i data-lucide="hand"></i> Pickup
-                            </button>
-                            <button id="btn-sit" class="action-btn" disabled>
-                                <i data-lucide="armchair"></i> Sit/Stand
-                            </button>
-                            <button id="btn-chat" class="action-btn" disabled>
-                                <i data-lucide="message-square"></i> Chat
-                            </button>
-                            <button id="btn-disconnect" class="action-btn secondary">
-                                <i data-lucide="log-out"></i> Disconnect
-                            </button>
-                            <button id="btn-connect" class="action-btn">
-                                <i data-lucide="log-in"></i> Connect
+            <!-- Event Log Tab -->
+            <section id="tab-event-log" class="tab-content">
+                <article class="panel event-log-panel">
+                    <header>
+                        <h3><i data-lucide="activity"></i> Event Log</h3>
+                        <div class="header-actions">
+                            <select id="event-filter" class="filter-select">
+                                <option value="all">All Events</option>
+                                <option value="system">System</option>
+                                <option value="character">Character</option>
+                                <option value="combat">Combat</option>
+                                <option value="chat">Chat</option>
+                                <option value="world">World</option>
+                            </select>
+                            <button id="clear-events" class="secondary small">
+                                <i data-lucide="trash-2"></i>
                             </button>
                         </div>
-                    </article>
-
-                    <!-- Target Info -->
-                    <article class="panel">
-                        <header>
-                            <h3><i data-lucide="target"></i> Target</h3>
-                        </header>
-                        <div id="target-info">
-                            <div class="target-empty">
-                                <i data-lucide="crosshair"></i>
-                                <p>No target selected</p>
-                            </div>
-                            <div id="target-details" class="target-details hidden">
-                                <div class="target-header">
-                                    <h4 id="target-name">--</h4>
-                                    <span id="target-type" class="badge">--</span>
-                                </div>
-                                <p id="target-level">Level --</p>
-                                <div class="stat-bar">
-                                    <label>HP <span id="target-hp-value">--/--</span></label>
-                                    <progress id="target-hp-bar" value="0" max="100"></progress>
-                                </div>
-                                <p id="target-distance">Distance: --m</p>
-                                <div class="target-actions">
-                                    <button id="btn-target-attack" class="small">
-                                        <i data-lucide="sword"></i> Attack
-                                    </button>
-                                    <button id="btn-target-skill" class="small secondary">
-                                        <i data-lucide="sparkles"></i> Skill
-                                    </button>
-                                </div>
-                            </div>
+                    </header>
+                    <div id="event-log" class="event-log">
+                        <div class="event-item system">
+                            <span class="event-time">--:--:--</span>
+                            <span class="event-channel">[system]</span>
+                            <span class="event-message">Waiting for connection...</span>
                         </div>
-                    </article>
-                </div>
+                    </div>
+                </article>
             </section>
 
             <!-- API Docs Tab -->

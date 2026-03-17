@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from 'express';
+import { GameCommandManager } from '../../game/GameCommandManager';
+import { ChatType } from '../../game/packets/outgoing';
 
 const router = Router();
 
@@ -13,6 +15,19 @@ const chatHistory: Array<{
 
 const MAX_HISTORY = 500;
 
+// Map API channel names to ChatType
+const channelToChatType: Record<string, ChatType> = {
+    'ALL': ChatType.ALL,
+    'SHOUT': ChatType.SHOUT,
+    'TELL': ChatType.TELL,
+    'PARTY': ChatType.PARTY,
+    'CLAN': ChatType.CLAN,
+    'TRADE': ChatType.TRADE,
+    'HERO': ChatType.HERO_VOICE,
+    'WHISPER': ChatType.WHISPER,
+    'ALLIANCE': ChatType.ALLIANCE
+};
+
 /**
  * POST /api/v1/chat/send
  * Send a chat message.
@@ -21,13 +36,13 @@ const MAX_HISTORY = 500;
 router.post('/send', (req: Request, res: Response) => {
     const { channel, message, target } = req.body;
 
-    const validChannels = ['ALL', 'SHOUT', 'TELL', 'PARTY', 'CLAN', 'TRADE', 'HERO'];
+    const validChannels = Object.keys(channelToChatType);
     
     if (!validChannels.includes(channel)) {
         res.status(400).json({
             success: false,
             error: {
-                code: 'INVALID_TARGET',
+                code: 'INVALID_CHANNEL',
                 message: `Invalid channel. Valid: ${validChannels.join(', ')}`
             },
             meta: {
@@ -38,12 +53,12 @@ router.post('/send', (req: Request, res: Response) => {
         return;
     }
 
-    if (channel === 'TELL' && !target) {
+    if ((channel === 'TELL' || channel === 'WHISPER') && !target) {
         res.status(400).json({
             success: false,
             error: {
                 code: 'INVALID_TARGET',
-                message: 'TELL channel requires target parameter'
+                message: 'TELL/WHISPER channel requires target parameter'
             },
             meta: {
                 timestamp: new Date().toISOString(),
@@ -53,20 +68,51 @@ router.post('/send', (req: Request, res: Response) => {
         return;
     }
 
-    // TODO: Send chat packet via GameClient
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'INVALID_MESSAGE',
+                message: 'Message cannot be empty'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
 
-    res.json({
-        success: true,
-        data: {
-            message: 'Chat message sent',
-            channel,
-            text: message
-        },
-        meta: {
-            timestamp: new Date().toISOString(),
-            requestId: req.requestId
-        }
-    });
+    // Send chat via GameCommandManager
+    const chatType = channelToChatType[channel];
+    const success = GameCommandManager.sendChat(message, chatType, target || '');
+
+    if (success) {
+        res.json({
+            success: true,
+            data: {
+                message: 'Chat message sent',
+                channel,
+                text: message
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send chat - not in game'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
 });
 
 /**

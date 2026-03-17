@@ -157,7 +157,7 @@ class L2ApiClient {
     }
 
     async pickupItem(objectId) {
-        return this.request('POST', '/pickup', { objectId });
+        return this.request('POST', '/nearby/pickup', { objectId });
     }
 
     // ==================== Movement ====================
@@ -231,6 +231,10 @@ class L2ApiClient {
     
     async socialAction(actionId) {
         return this.request('POST', '/social/action', { actionId });
+    }
+
+    async toggleSit(stand = false) {
+        return this.request('POST', '/social/sit', { stand });
     }
 }
 

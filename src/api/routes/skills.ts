@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
+import { GameCommandManager } from '../../game/GameCommandManager';
+import { Logger } from '../../logger/Logger';
 
 const router = Router();
 
@@ -8,12 +10,13 @@ const router = Router();
  * Returns list of character skills.
  */
 router.get('/', (req: Request, res: Response) => {
-    // TODO: Get actual skills from GameStateStore
-    
+    const character = GameStateStore.getCharacter();
+    const skills = character.skills || [];
+
     res.json({
         success: true,
         data: {
-            skills: []
+            skills
         },
         meta: {
             timestamp: new Date().toISOString(),
@@ -25,28 +28,78 @@ router.get('/', (req: Request, res: Response) => {
 /**
  * POST /api/v1/skills/use
  * Use a skill.
- * Body: { skillId: number, level?: number, targetObjectId?: number, ctrlPressed?: boolean, shiftPressed?: boolean }
+ * Body: { skillId: number, ctrlPressed?: boolean, shiftPressed?: boolean }
  */
 router.post('/use', (req: Request, res: Response) => {
-    const { skillId, level, targetObjectId, ctrlPressed, shiftPressed } = req.body;
+    const { skillId, ctrlPressed, shiftPressed } = req.body;
 
-    // TODO: Validate skill exists and send packet via GameClient
+    if (typeof skillId !== 'number') {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'INVALID_PARAMETER',
+                message: 'skillId is required and must be a number'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
 
-    res.json({
-        success: true,
-        data: {
-            message: 'Skill use command sent',
-            skillId,
-            level,
-            targetObjectId,
-            ctrlPressed: ctrlPressed || false,
-            shiftPressed: shiftPressed || false
-        },
-        meta: {
-            timestamp: new Date().toISOString(),
-            requestId: req.requestId
-        }
-    });
+    const character = GameStateStore.getCharacter();
+    const skills = character.skills || [];
+    
+    // Validate skill exists in character's skill list
+    const skill = skills.find((s: { id: number }) => s.id === skillId);
+    if (!skill) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'SKILL_NOT_FOUND',
+                message: `Skill ${skillId} not found in character skill list`
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Send skill use command via GameCommandManager
+    const success = GameCommandManager.useSkill(skillId, ctrlPressed || false, shiftPressed || false);
+
+    if (success) {
+        Logger.info('SkillsRoute', `Skill use command sent: ${skillId} (${skill.name || 'Unknown'})`);
+        res.json({
+            success: true,
+            data: {
+                message: 'Skill use command sent',
+                skillId,
+                skillName: skill.name || 'Unknown',
+                ctrlPressed: ctrlPressed || false,
+                shiftPressed: shiftPressed || false
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send skill use command - not in game'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
 });
 
 /**
@@ -54,8 +107,8 @@ router.post('/use', (req: Request, res: Response) => {
  * Returns skill shortcuts (hotkeys).
  */
 router.get('/shortcuts', (req: Request, res: Response) => {
-    // TODO: Get shortcuts from GameStateStore
-    
+    // TODO: Implement shortcuts storage in GameStateStore
+    // For now, return empty array
     res.json({
         success: true,
         data: {

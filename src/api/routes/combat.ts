@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
+import { GameCommandManager } from '../../game/GameCommandManager';
 import { combatRateLimitMiddleware } from '../middleware/rateLimiter';
 
 const router = Router();
@@ -31,20 +32,35 @@ router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) 
         return;
     }
 
-    // TODO: Send attack packet via GameClient
-    // For now, just return success placeholder
-    res.json({
-        success: true,
-        data: {
-            message: 'Attack command sent',
-            targetId,
-            shiftClick: shiftClick || false
-        },
-        meta: {
-            timestamp: new Date().toISOString(),
-            requestId: req.requestId
-        }
-    });
+    // Send attack command via GameCommandManager
+    const success = GameCommandManager.attack(targetId, shiftClick || false);
+    
+    if (success) {
+        res.json({
+            success: true,
+            data: {
+                message: 'Attack command sent',
+                targetId,
+                shiftClick: shiftClick || false
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send attack command - not in game'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
 });
 
 /**
@@ -52,7 +68,6 @@ router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) 
  * Stop auto-attack.
  */
 router.post('/stop', combatRateLimitMiddleware, (req: Request, res: Response) => {
-    // TODO: Send stop packet via GameClient
     GameStateStore.setInCombat(false);
 
     res.json({

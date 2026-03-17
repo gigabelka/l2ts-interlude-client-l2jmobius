@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
+import { GameCommandManager } from '../../game/GameCommandManager';
 import { Logger } from '../../logger/Logger';
 
 const router = Router();
@@ -110,7 +111,10 @@ router.post('/next', (req: Request, res: Response) => {
         }
     }
 
-    // Set the new target
+    // Send Action packet to server to select target
+    const actionSuccess = GameCommandManager.action(nextTarget.objectId, false);
+    
+    // Update local state
     GameStateStore.setTarget(nextTarget.objectId, nextTarget.name, 'NPC');
 
     Logger.info('TargetRoute', `Next target selected: ${nextTarget.name} (${nextTarget.objectId}) at ${nextTarget.distance?.toFixed(1)}m`);
@@ -125,12 +129,64 @@ router.post('/next', (req: Request, res: Response) => {
             distance: nextTarget.distance,
             hp: nextTarget.hp,
             isAttackable: nextTarget.isAttackable,
-            isAggressive: nextTarget.isAggressive
+            isAggressive: nextTarget.isAggressive,
+            actionSent: actionSuccess
         },
         meta: {
             timestamp: new Date().toISOString(),
             requestId: req.requestId
         }
+    });
+});
+
+/**
+ * POST /api/v1/target/set
+ * Set target by objectId.
+ */
+router.post('/set', (req: Request, res: Response) => {
+    const { objectId, name, type } = req.body;
+
+    if (typeof objectId !== 'number') {
+        res.status(400).json({
+            success: false,
+            error: { code: 'INVALID_PARAMETER', message: 'objectId must be a number' },
+            meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+        });
+        return;
+    }
+
+    // Send Action packet to server to select target
+    const actionSuccess = GameCommandManager.action(objectId, false);
+
+    // Update local state
+    GameStateStore.setTarget(objectId, name || '', type || 'NPC');
+
+    res.json({
+        success: true,
+        data: { 
+            objectId, 
+            name: name || '', 
+            type: type || 'NPC',
+            actionSent: actionSuccess
+        },
+        meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+    });
+});
+
+/**
+ * POST /api/v1/target/clear
+ * Clear current target.
+ */
+router.post('/clear', (req: Request, res: Response) => {
+    // Send Action packet with objectId 0 to clear target
+    GameCommandManager.action(0, false);
+    
+    GameStateStore.setTarget(0, '', undefined);
+
+    res.json({
+        success: true,
+        data: { message: 'Target cleared' },
+        meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
     });
 });
 

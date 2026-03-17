@@ -179,6 +179,17 @@ export interface WorldItemPickedUpEvent extends BaseEvent {
     };
 }
 
+export interface WorldItemPickingUpEvent extends BaseEvent {
+    type: 'world.item_picking_up';
+    channel: 'world';
+    data: {
+        objectId: number;
+        itemId: number;
+        name: string;
+        count: number;
+    };
+}
+
 // Movement events
 export interface MovementPositionChangedEvent extends BaseEvent {
     type: 'movement.position_changed';
@@ -255,6 +266,7 @@ export interface ChatMessageEvent extends BaseEvent {
         channel: string;
         senderName: string;
         senderObjectId?: number;
+        objectId?: number;
         message: string;
         receivedAt: string;
     };
@@ -267,6 +279,40 @@ export interface ChatSystemMessageEvent extends BaseEvent {
         messageId: number;
         messageText: string;
         params: string[];
+    };
+}
+
+// Combat started event
+export interface CombatAttackStartedEvent extends BaseEvent {
+    type: 'combat.attack_started';
+    channel: 'combat';
+    data: {
+        attackerObjectId: number;
+        targetObjectId: number;
+    };
+}
+
+// Player seen event
+export interface WorldPlayerSeenEvent extends BaseEvent {
+    type: 'world.player_seen';
+    channel: 'world';
+    data: {
+        objectId: number;
+        name: string;
+        position: { x: number; y: number; z: number };
+    };
+}
+
+// Raw packet event - for any packet
+export interface RawPacketEvent extends BaseEvent {
+    type: 'system.raw_packet';
+    channel: 'system';
+    data: {
+        opcode: number;
+        opcodeHex: string;
+        length: number;
+        state?: string;
+        source?: string;
     };
 }
 
@@ -286,6 +332,7 @@ export type GameEvent =
     | WorldNpcDespawnedEvent
     | WorldItemDroppedEvent
     | WorldItemPickedUpEvent
+    | WorldItemPickingUpEvent
     | MovementPositionChangedEvent
     | SystemConnectedEvent
     | SystemDisconnectedEvent
@@ -294,7 +341,10 @@ export type GameEvent =
     | SystemUnsubscribedEvent
     | PongEvent
     | ChatMessageEvent
-    | ChatSystemMessageEvent;
+    | ChatSystemMessageEvent
+    | CombatAttackStartedEvent
+    | WorldPlayerSeenEvent
+    | RawPacketEvent;
 
 /**
  * Typed EventBus wrapper around EventEmitter.

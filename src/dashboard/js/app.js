@@ -115,22 +115,12 @@ class DashboardApp {
     setupQuickActions() {
         // console.log('[DashboardApp] Setting up quick actions');
         
-        // Connect button
-        const btnConnect = document.getElementById('btn-connect');
-        if (btnConnect) {
-            btnConnect.addEventListener('click', () => this.handleConnect());
-            // console.log('[DashboardApp] Connect button bound');
+        // Toggle Connect button (Connect/Disconnect)
+        const btnToggleConnect = document.getElementById('btn-toggle-connect');
+        if (btnToggleConnect) {
+            btnToggleConnect.addEventListener('click', () => this.handleToggleConnect());
         } else {
-            console.warn('[DashboardApp] Connect button not found');
-        }
-        
-        // Disconnect button
-        const btnDisconnect = document.getElementById('btn-disconnect');
-        if (btnDisconnect) {
-            btnDisconnect.addEventListener('click', () => this.handleDisconnect());
-            // console.log('[DashboardApp] Disconnect button bound');
-        } else {
-            console.warn('[DashboardApp] Disconnect button not found');
+            console.warn('[DashboardApp] Toggle Connect button not found');
         }
         
         // Attack button - toggle attack
@@ -193,6 +183,190 @@ class DashboardApp {
             // console.log('[DashboardApp] Target Skill button bound');
         } else {
             console.warn('[DashboardApp] Target Skill button not found');
+        }
+        
+        // Movement buttons
+        this.setupMovementControls();
+    }
+
+    /**
+     * Setup movement controls
+     */
+    setupMovementControls() {
+        // Movement buttons
+        const btnForward = document.getElementById('btn-move-forward');
+        const btnBackward = document.getElementById('btn-move-backward');
+        const btnLeft = document.getElementById('btn-move-left');
+        const btnRight = document.getElementById('btn-move-right');
+        const btnStop = document.getElementById('btn-move-stop');
+        
+        if (btnForward) {
+            btnForward.addEventListener('click', () => this.handleMove('forward'));
+        }
+        if (btnBackward) {
+            btnBackward.addEventListener('click', () => this.handleMove('backward'));
+        }
+        if (btnLeft) {
+            btnLeft.addEventListener('click', () => this.handleMove('left'));
+        }
+        if (btnRight) {
+            btnRight.addEventListener('click', () => this.handleMove('right'));
+        }
+        if (btnStop) {
+            btnStop.addEventListener('click', () => this.handleStopMove());
+        }
+        
+        // Keyboard controls for movement
+        document.addEventListener('keydown', (e) => {
+            if (!this.isInGame) return;
+            // Don't trigger if typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            switch(e.key.toLowerCase()) {
+                case 'w':
+                case 'arrowup':
+                    e.preventDefault();
+                    this.handleMove('forward');
+                    break;
+                case 's':
+                case 'arrowdown':
+                    e.preventDefault();
+                    this.handleMove('backward');
+                    break;
+                case 'a':
+                case 'arrowleft':
+                    e.preventDefault();
+                    this.handleMove('left');
+                    break;
+                case 'd':
+                case 'arrowright':
+                    e.preventDefault();
+                    this.handleMove('right');
+                    break;
+                case 'x':
+                    e.preventDefault();
+                    this.handleStopMove();
+                    break;
+            }
+        });
+        
+        // Step size slider
+        const stepSlider = document.getElementById('movement-step');
+        const stepValue = document.getElementById('movement-step-value');
+        if (stepSlider && stepValue) {
+            stepSlider.addEventListener('input', (e) => {
+                stepValue.textContent = e.target.value;
+            });
+        }
+    }
+
+    /**
+     * Get current character position from UI
+     */
+    getCurrentPosition() {
+        const posX = document.getElementById('pos-x');
+        const posY = document.getElementById('pos-y');
+        const posZ = document.getElementById('pos-z');
+        
+        if (!posX || !posY || !posZ) return null;
+        
+        const x = parseInt(posX.textContent);
+        const y = parseInt(posY.textContent);
+        const z = parseInt(posZ.textContent);
+        
+        if (isNaN(x) || isNaN(y) || isNaN(z)) return null;
+        
+        return { x, y, z };
+    }
+
+    /**
+     * Get movement step size from slider
+     */
+    getMovementStep() {
+        const slider = document.getElementById('movement-step');
+        return slider ? parseInt(slider.value) : 100;
+    }
+
+    /**
+     * Handle movement in a direction
+     */
+    async handleMove(direction) {
+        if (!this.isInGame) {
+            if (typeof eventLog !== 'undefined') {
+                eventLog.addSystemMessage('⚠️ Not in game');
+            }
+            return;
+        }
+        
+        const currentPos = this.getCurrentPosition();
+        if (!currentPos) {
+            if (typeof eventLog !== 'undefined') {
+                eventLog.addSystemMessage('⚠️ Position unknown, cannot move');
+            }
+            return;
+        }
+        
+        const step = this.getMovementStep();
+        let newPos = { ...currentPos };
+        let directionName = '';
+        
+        switch(direction) {
+            case 'forward':
+                newPos.y -= step;
+                directionName = 'forward';
+                break;
+            case 'backward':
+                newPos.y += step;
+                directionName = 'backward';
+                break;
+            case 'left':
+                newPos.x -= step;
+                directionName = 'left';
+                break;
+            case 'right':
+                newPos.x += step;
+                directionName = 'right';
+                break;
+        }
+        
+        try {
+            if (typeof apiClient === 'undefined') {
+                throw new Error('API client not available');
+            }
+            
+            if (typeof eventLog !== 'undefined') {
+                eventLog.addSystemMessage(`🚶 Moving ${directionName} (${step} units)`);
+            }
+            
+            await apiClient.moveTo(newPos.x, newPos.y, newPos.z);
+        } catch (error) {
+            console.error('[DashboardApp] Move error:', error);
+            if (typeof eventLog !== 'undefined') {
+                eventLog.addSystemMessage(`❌ Move failed: ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * Handle stop movement
+     */
+    async handleStopMove() {
+        if (!this.isInGame) return;
+        
+        try {
+            if (typeof apiClient === 'undefined') {
+                throw new Error('API client not available');
+            }
+            
+            await apiClient.stopMove();
+            if (typeof eventLog !== 'undefined') {
+                eventLog.addSystemMessage('🛑 Stopped');
+            }
+        } catch (error) {
+            console.error('[DashboardApp] Stop move error:', error);
+            if (typeof eventLog !== 'undefined') {
+                eventLog.addSystemMessage(`❌ Stop failed: ${error.message}`);
+            }
         }
     }
 
@@ -375,17 +549,29 @@ class DashboardApp {
             }
         });
         
-        // Connect/Disconnect buttons
-        const btnConnect = document.getElementById('btn-connect');
-        const btnDisconnect = document.getElementById('btn-disconnect');
+        // Movement buttons - only enabled when in game
+        const movementButtons = ['btn-move-forward', 'btn-move-backward', 'btn-move-left', 'btn-move-right', 'btn-move-stop'];
+        movementButtons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.disabled = !isInGame;
+            }
+        });
         
-        if (btnConnect) {
-            btnConnect.disabled = !isDisconnected;
-            btnConnect.classList.toggle('disabled', !isDisconnected);
-        }
-        if (btnDisconnect) {
-            btnDisconnect.disabled = isDisconnected;
-            btnDisconnect.classList.toggle('disabled', isDisconnected);
+        // Toggle Connect button
+        const btnToggleConnect = document.getElementById('btn-toggle-connect');
+        if (btnToggleConnect) {
+            const isDisconnected = this.connectionStatus === 'DISCONNECTED' || this.connectionStatus === 'ERROR';
+            if (isDisconnected) {
+                btnToggleConnect.innerHTML = '<i data-lucide="log-in"></i> Connect';
+                btnToggleConnect.classList.remove('secondary');
+            } else {
+                btnToggleConnect.innerHTML = '<i data-lucide="log-out"></i> Disconnect';
+                btnToggleConnect.classList.add('secondary');
+            }
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
         }
         
         // Target action buttons
@@ -494,56 +680,60 @@ class DashboardApp {
 
     // ==================== Action Handlers ====================
 
-    async handleConnect() {
-        console.log('[DashboardApp] Handle Connect clicked');
-        if (typeof eventLog !== 'undefined') {
-            eventLog.addSystemMessage('🔄 Connecting to game server...');
-        }
+    async handleToggleConnect() {
+        const isDisconnected = this.connectionStatus === 'DISCONNECTED' || this.connectionStatus === 'ERROR';
         
-        this.setButtonLoading('btn-connect', true);
-        try {
-            if (typeof apiClient === 'undefined') {
-                throw new Error('API client not available');
-            }
-            const result = await apiClient.connect();
-            console.log('[DashboardApp] Connect result:', result);
+        if (isDisconnected) {
+            // Connect
+            console.log('[DashboardApp] Handle Connect clicked');
             if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('✅ Connection initiated successfully');
+                eventLog.addSystemMessage('🔄 Connecting to game server...');
             }
-        } catch (error) {
-            console.error('[DashboardApp] Connect error:', error);
+            
+            this.setButtonLoading('btn-toggle-connect', true);
+            try {
+                if (typeof apiClient === 'undefined') {
+                    throw new Error('API client not available');
+                }
+                const result = await apiClient.connect();
+                console.log('[DashboardApp] Connect result:', result);
+                if (typeof eventLog !== 'undefined') {
+                    eventLog.addSystemMessage('✅ Connection initiated successfully');
+                }
+            } catch (error) {
+                console.error('[DashboardApp] Connect error:', error);
+                if (typeof eventLog !== 'undefined') {
+                    eventLog.addSystemMessage(`❌ Connection failed: ${error.message}`);
+                }
+            } finally {
+                this.setButtonLoading('btn-toggle-connect', false);
+            }
+        } else {
+            // Disconnect
+            console.log('[DashboardApp] Handle Disconnect clicked');
             if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Connection failed: ${error.message}`);
+                eventLog.addSystemMessage('🔄 Disconnecting...');
             }
-        } finally {
-            this.setButtonLoading('btn-connect', false);
-        }
-    }
-
-    async handleDisconnect() {
-        console.log('[DashboardApp] Handle Disconnect clicked');
-        if (typeof eventLog !== 'undefined') {
-            eventLog.addSystemMessage('🔄 Disconnecting...');
-        }
-        
-        this.setButtonLoading('btn-disconnect', true);
-        try {
-            if (typeof apiClient === 'undefined') {
-                throw new Error('API client not available');
+            
+            this.setButtonLoading('btn-toggle-connect', true);
+            try {
+                if (typeof apiClient === 'undefined') {
+                    throw new Error('API client not available');
+                }
+                await apiClient.disconnect();
+                if (typeof eventLog !== 'undefined') {
+                    eventLog.addSystemMessage('✅ Disconnected from game server');
+                }
+                this.isInGame = false;
+                this.updateActionButtons();
+            } catch (error) {
+                console.error('[DashboardApp] Disconnect error:', error);
+                if (typeof eventLog !== 'undefined') {
+                    eventLog.addSystemMessage(`❌ Disconnect error: ${error.message}`);
+                }
+            } finally {
+                this.setButtonLoading('btn-toggle-connect', false);
             }
-            await apiClient.disconnect();
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('✅ Disconnected from game server');
-            }
-            this.isInGame = false;
-            this.updateActionButtons();
-        } catch (error) {
-            console.error('[DashboardApp] Disconnect error:', error);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Disconnect error: ${error.message}`);
-            }
-        } finally {
-            this.setButtonLoading('btn-disconnect', false);
         }
     }
 
@@ -620,13 +810,14 @@ class DashboardApp {
             }
             
             // Get nearby items first
-            const items = await apiClient.getNearbyItems(200);
-            if (items && items.length > 0) {
+            const result = await apiClient.getNearbyItems(200);
+            const items = result?.items || [];
+            if (items.length > 0) {
                 // Pick up the closest item
                 const item = items[0];
                 await apiClient.pickupItem(item.objectId);
                 if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage(`📦 Picking up ${item.name || 'item'}`);
+                    eventLog.addSystemMessage(`📦 Moving to pickup ${item.name || 'item'} x${item.count || 1}`);
                 }
             } else {
                 if (typeof eventLog !== 'undefined') {
@@ -653,7 +844,7 @@ class DashboardApp {
                 throw new Error('API client not available');
             }
             
-            await apiClient.socialAction(0); // 0 = sit/stand toggle
+            await apiClient.toggleSit(isSitting); // true = stand, false = sit
             if (isSitting) {
                 if (typeof eventLog !== 'undefined') {
                     eventLog.addSystemMessage('🧍 Standing up');

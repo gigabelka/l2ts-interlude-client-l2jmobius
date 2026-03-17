@@ -16,6 +16,7 @@ import { CONFIG } from '../config';
 import { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
 import { GameStateStore } from '../core/GameStateStore';
 import { EventBus } from '../core/EventBus';
+import { GameCommandManager } from './GameCommandManager';
 
 export class GameClient extends Connection {
     private state: GameState = GameState.IDLE;
@@ -32,6 +33,9 @@ export class GameClient extends Connection {
         Logger.logState(this.state, GameState.CONNECTING);
         Logger.info('GameClient', `Connecting to Game Server: ${this.session.gameServerIp}:${this.session.gameServerPort}`);
         this.state = GameState.CONNECTING;
+        
+        // Register with command manager
+        GameCommandManager.setGameClient(this);
         
         // Update connection state
         GameStateStore.updateConnection({
@@ -57,6 +61,9 @@ export class GameClient extends Connection {
 
     protected onClose(): void {
         Logger.info('GameClient', '*** GAME SERVER CONNECTION CLOSED ***');
+        
+        // Unregister from command manager
+        GameCommandManager.setGameClient(null);
         
         GameStateStore.updateConnection({
             phase: 'DISCONNECTED',
@@ -103,6 +110,19 @@ export class GameClient extends Connection {
         Logger.debug('GameClient', `[state=${this.state}] opcode=0x${opcode.toString(16).padStart(2, '0')} bodyLen=${body.length}`);
 
         Logger.hexDump('RECV DECRYPTED', body, Math.min(body.length, 64));
+
+        // Emit raw packet event for WebSocket - ALL PACKETS go to dashboard
+        EventBus.emitEvent({
+            type: 'system.raw_packet',
+            channel: 'system',
+            data: {
+                opcode: opcode,
+                opcodeHex: `0x${opcode.toString(16).padStart(2, '0')}`,
+                length: body.length,
+                state: this.state
+            },
+            timestamp: new Date().toISOString()
+        });
 
         const packet = this.handler.handle(opcode, body, this.state);
 
@@ -215,14 +235,15 @@ export class GameClient extends Connection {
             }
 
             case GameState.IN_GAME: {
+                // Handle ping
                 if (opcode === 0xD3) {
                     const p = packet as NetPingRequestPacket;
                     Logger.debug('GameClient', `pingId=${p.pingId} -> Pong`);
                     this.sendPacketRawBuffer(Buffer.from([0xA8, p.pingId]));
                 }
                 
-                // TODO: Handle more packets (NPC info, combat, chat, etc.)
-                // and update GameStateStore accordingly
+                // All other packets are handled in their respective decode methods
+                // which emit events to EventBus -> WebSocket
                 break;
             }
 
@@ -249,7 +270,10 @@ export class GameClient extends Connection {
         this.sendPacketRawBuffer(enterWorldPayload);
     }
 
-    private sendPacket(packet: OutgoingGamePacket): void {
+    /**
+     * Send a game packet (public API for GameCommandManager)
+     */
+    sendPacket(packet: OutgoingGamePacket): void {
         const body = packet.encode();
         const encrypted = this.crypt.encrypt(body);
         this.sendPacketRawBuffer(encrypted);

@@ -68,7 +68,15 @@ export interface CharacterState {
     position: Position;
     stats: Partial<CharacterStats>;
     buffs: Buff[];
+    skills: SkillInfo[];
     targetObjectId?: number;
+}
+
+export interface SkillInfo {
+    id: number;
+    level: number;
+    name?: string;
+    isPassive?: boolean;
 }
 
 export interface NpcInfo {
@@ -391,6 +399,33 @@ class GameStateStoreClass {
 
     updateParty(data: Partial<PartyState>): void {
         this.party = { ...this.party, ...data };
+    }
+
+    addPartyMember(member: PartyMember): void {
+        const existingIndex = this.party.members.findIndex(m => m.objectId === member.objectId);
+        if (existingIndex >= 0) {
+            this.party.members[existingIndex] = member;
+        } else {
+            this.party.members.push(member);
+        }
+        this.party.inParty = this.party.members.length > 0;
+    }
+
+    removePartyMember(objectId: number): void {
+        this.party.members = this.party.members.filter(m => m.objectId !== objectId);
+        this.party.inParty = this.party.members.length > 0;
+        if (!this.party.inParty) {
+            this.party.isLeader = false;
+        }
+    }
+
+    // Skills methods
+    updateSkills(skills: SkillInfo[]): void {
+        this.character.skills = skills;
+    }
+
+    getSkills(): SkillInfo[] {
+        return this.character.skills || [];
     }
 
     // Connection methods

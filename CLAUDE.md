@@ -90,7 +90,7 @@ All information about protocol, packet formats and crypto must be taken exclusiv
 
 - Set `Logger.level = 'DEBUG'` in `src/index.ts` for verbose packet logging
 - Monitor `[STATE]` log lines to track FSM transitions
-- Check `docs.md` for detailed packet formats and crypto specifications
-- Check `Working packets from Wireshark.md` for reference captures
+- Check `client_server_protocol.md` for detailed packet formats and crypto specifications
+- Check `DEBUG_HISTORY.md` for a history of previous problems and solutions
 - **Required:** Read `DEBUG_HISTORY.md` before debugging - it contains a history of previous problems and solutions.
 - **Recommendation:** See `DEBUG_NOTES.md` for general debugging tips.

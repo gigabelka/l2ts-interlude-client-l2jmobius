@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
+import { GameCommandManager } from '../../game/GameCommandManager';
 import { moveRateLimitMiddleware } from '../middleware/rateLimiter';
+import { Logger } from '../../logger/Logger';
 
 const router = Router();
 
@@ -51,20 +53,35 @@ router.post('/to', moveRateLimitMiddleware, (req: Request, res: Response) => {
         }
     }
 
-    // TODO: Send move packet via GameClient
-    // For now, just return success placeholder
-    res.json({
-        success: true,
-        data: {
-            message: 'Move command sent',
-            destination: { x, y, z },
-            estimatedTimeMs: 4200 // Placeholder
-        },
-        meta: {
-            timestamp: new Date().toISOString(),
-            requestId: req.requestId
-        }
-    });
+    // Send move command via GameCommandManager
+    const success = GameCommandManager.moveTo(x, y, z);
+    
+    if (success) {
+        res.json({
+            success: true,
+            data: {
+                message: 'Move command sent',
+                destination: { x, y, z },
+                from: character.position
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send move command - not in game or position unknown'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
 });
 
 /**
@@ -72,12 +89,77 @@ router.post('/to', moveRateLimitMiddleware, (req: Request, res: Response) => {
  * Stop movement.
  */
 router.post('/stop', moveRateLimitMiddleware, (req: Request, res: Response) => {
-    // TODO: Send stop packet via GameClient
+    const character = GameStateStore.getCharacter();
+
+    if (!character.position) {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'NOT_IN_GAME',
+                message: 'Character position not available'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Send stop movement command via GameCommandManager
+    const success = GameCommandManager.stopMove();
+
+    if (success) {
+        Logger.info('MovementRoute', `Stop movement command sent at ${character.position.x},${character.position.y},${character.position.z}`);
+        res.json({
+            success: true,
+            data: {
+                message: 'Stop movement command sent',
+                position: character.position
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send stop movement command - not in game or position unknown'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
+});
+
+/**
+ * GET /api/v1/move/status
+ * Get current movement status.
+ */
+router.get('/status', (req: Request, res: Response) => {
+    const character = GameStateStore.getCharacter();
+    const connection = GameStateStore.getConnection();
+    
+    // Determine if character is moving based on connection phase and position availability
+    const isInGame = connection.phase === 'IN_GAME';
+    const hasPosition = character.position !== undefined && character.position !== null;
+    
+    // TODO: In future, track actual movement state when we have MoveToLocation packets
+    const isMoving = false;
 
     res.json({
         success: true,
         data: {
-            message: 'Stop movement command sent'
+            isMoving,
+            isInGame,
+            hasPosition,
+            position: character.position || null,
+            speed: character.stats?.speed || 0
         },
         meta: {
             timestamp: new Date().toISOString(),
@@ -87,24 +169,85 @@ router.post('/stop', moveRateLimitMiddleware, (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/v1/move/status
- * Get current movement status.
+ * POST /api/v1/move/follow
+ * Follow a target.
+ * Body: { objectId: number, minDistance?: number }
  */
-router.get('/status', (req: Request, res: Response) => {
-    // TODO: Get actual movement status from GameStateStore
+router.post('/follow', moveRateLimitMiddleware, (req: Request, res: Response) => {
+    const { objectId, minDistance } = req.body;
+
+    if (typeof objectId !== 'number') {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'INVALID_PARAMETER',
+                message: 'objectId is required and must be a number'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    const world = GameStateStore.getWorld();
     
-    res.json({
-        success: true,
-        data: {
-            isMoving: false,
-            destination: null,
-            speed: GameStateStore.getCharacter().stats?.speed || 0
-        },
-        meta: {
-            timestamp: new Date().toISOString(),
-            requestId: req.requestId
-        }
-    });
+    // Validate target exists
+    const npcTarget = world.npcs.get(objectId);
+    const playerTarget = world.players.get(objectId);
+    const target = npcTarget || playerTarget;
+
+    if (!target) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'TARGET_NOT_FOUND',
+                message: `Target with objectId ${objectId} not found in world`
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    const distance = minDistance || 100;
+
+    // Send follow command via GameCommandManager
+    const success = GameCommandManager.follow(objectId, distance);
+
+    if (success) {
+        Logger.info('MovementRoute', `Follow command sent: ${target.name} (${objectId}) at distance ${distance}`);
+        res.json({
+            success: true,
+            data: {
+                message: 'Follow command sent',
+                objectId,
+                targetName: target.name,
+                targetType: npcTarget ? 'NPC' : 'PLAYER',
+                minDistance: distance,
+                targetPosition: target.position
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send follow command - not in game or position unknown'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
 });
 
 export default router;

@@ -124,7 +124,7 @@ export class ApiServer {
         apiRouter.use('/skills', skillsRouter);
         apiRouter.use('/chat', chatRouter);
         apiRouter.use('/party', partyRouter);
-        apiRouter.use('/connect', connectionRouter);
+        apiRouter.use('/', connectionRouter);
         apiRouter.use('/social', socialRouter);
 
         // Mount API v1

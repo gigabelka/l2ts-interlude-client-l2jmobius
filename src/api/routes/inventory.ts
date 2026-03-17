@@ -1,6 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
+import { GameCommandManager } from '../../game/GameCommandManager';
 import type { InventoryItem } from '../../core/GameStateStore';
+import { Logger } from '../../logger/Logger';
 
 const router = Router();
 
@@ -39,6 +41,209 @@ router.get('/', (req: Request, res: Response) => {
             requestId: req.requestId
         }
     });
+});
+
+/**
+ * POST /api/v1/inventory/use
+ * Use an item from inventory.
+ * Body: { objectId: number }
+ */
+router.post('/use', (req: Request, res: Response) => {
+    const { objectId } = req.body;
+
+    if (typeof objectId !== 'number') {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'INVALID_PARAMETER',
+                message: 'objectId is required and must be a number'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    const inventory = GameStateStore.getInventory();
+    const items = inventory.items || [];
+
+    // Validate item exists in inventory
+    const item = items.find((i: InventoryItem) => i.objectId === objectId);
+    if (!item) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'ITEM_NOT_FOUND',
+                message: `Item with objectId ${objectId} not found in inventory`
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Send use item command via GameCommandManager
+    const success = GameCommandManager.useItem(objectId);
+
+    if (success) {
+        Logger.info('InventoryRoute', `Use item command sent: ${item.name} (${objectId})`);
+        res.json({
+            success: true,
+            data: {
+                message: 'Use item command sent',
+                objectId,
+                itemName: item.name,
+                itemId: item.itemId
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send use item command - not in game'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
+});
+
+/**
+ * POST /api/v1/inventory/drop
+ * Drop an item on the ground.
+ * Body: { objectId: number, count: number, position?: { x: number, y: number, z: number } }
+ */
+router.post('/drop', (req: Request, res: Response) => {
+    const { objectId, count, position } = req.body;
+
+    if (typeof objectId !== 'number') {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'INVALID_PARAMETER',
+                message: 'objectId is required and must be a number'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    if (typeof count !== 'number' || count <= 0) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'INVALID_PARAMETER',
+                message: 'count is required and must be a positive number'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Validate position if provided
+    if (position !== undefined) {
+        if (typeof position.x !== 'number' || typeof position.y !== 'number' || typeof position.z !== 'number') {
+            res.status(400).json({
+                success: false,
+                error: {
+                    code: 'INVALID_PARAMETER',
+                    message: 'position must have x, y, z as numbers'
+                },
+                meta: {
+                    timestamp: new Date().toISOString(),
+                    requestId: req.requestId
+                }
+            });
+            return;
+        }
+    }
+
+    const inventory = GameStateStore.getInventory();
+    const items = inventory.items || [];
+
+    // Validate item exists in inventory
+    const item = items.find((i: InventoryItem) => i.objectId === objectId);
+    if (!item) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'ITEM_NOT_FOUND',
+                message: `Item with objectId ${objectId} not found in inventory`
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Validate count doesn't exceed available
+    if (count > item.count) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'INSUFFICIENT_COUNT',
+                message: `Cannot drop ${count} of ${item.name}, only ${item.count} available`
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Send drop item command via GameCommandManager
+    const success = GameCommandManager.dropItem(objectId, count, position);
+
+    if (success) {
+        Logger.info('InventoryRoute', `Drop item command sent: ${item.name} x${count} (${objectId})`);
+        res.json({
+            success: true,
+            data: {
+                message: 'Drop item command sent',
+                objectId,
+                itemName: item.name,
+                itemId: item.itemId,
+                count,
+                position: position || GameStateStore.getCharacter().position
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send drop item command - not in game or position unknown'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
 });
 
 export default router;

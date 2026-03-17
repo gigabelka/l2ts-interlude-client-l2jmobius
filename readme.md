@@ -49,13 +49,17 @@ curl -X POST \
 ### WebSocket Events
 
 ```javascript
-const ws = new WebSocket('ws://localhost:3000/ws?token=dev_api_key_change_in_production');
+const ws = new WebSocket(
+  "ws://localhost:3000/ws?token=dev_api_key_change_in_production",
+);
 
 ws.onopen = () => {
-  ws.send(JSON.stringify({
-    type: 'subscribe',
-    channels: ['character', 'combat', 'world']
-  }));
+  ws.send(
+    JSON.stringify({
+      type: "subscribe",
+      channels: ["character", "combat", "world"],
+    }),
+  );
 };
 
 ws.onmessage = (event) => {
@@ -91,14 +95,14 @@ Edit `src/config.ts` with your server address, credentials, and character slot:
 
 ```typescript
 export const CONFIG = {
-    Username: "your_login",
-    Password: "your_password",
-    LoginIp: "192.168.0.33",
-    LoginPort: 2106,
-    GamePort: 7777,
-    Protocol: 746,
-    ServerId: 2,
-    CharSlotIndex: 0,
+  Username: "your_login",
+  Password: "your_password",
+  LoginIp: "192.168.0.33",
+  LoginPort: 2106,
+  GamePort: 7777,
+  Protocol: 746,
+  ServerId: 2,
+  CharSlotIndex: 0,
 } as const;
 ```
 
@@ -123,5 +127,7 @@ npm run build
 
 ## Version History
 
+- 0.2.1 — Added Dashboard
+- 0.1.39 — Fixed disconnect/reconnect routes, added target/set and target/clear endpoints, updated documentation
 - 0.1.38 — Added REST + WebSocket API layer, GameStateStore, EventBus
 - 0.1.33 — Initial commit. Automatic character login into the game.

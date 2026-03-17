@@ -11,14 +11,19 @@ import type { SessionData } from './login/types';
 const logLevel = process.env.LOG_LEVEL?.toUpperCase() || 'ERROR';
 Logger.level = logLevel as 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
+// Check if game client should be auto-started
+const AUTO_CONNECT_GAME = process.env.AUTO_CONNECT_GAME !== 'false';
+
 Logger.info('MAIN', '='.repeat(60));
 Logger.info('MAIN', 'L2 Headless Client — Interlude CT0');
 Logger.info('MAIN', '='.repeat(60));
+Logger.info('MAIN', `API Server : http://${CONFIG.LoginIp}:3000`);
 Logger.info('MAIN', `Login      : ${CONFIG.LoginIp}:${CONFIG.LoginPort}`);
 Logger.info('MAIN', `User       : ${CONFIG.Username}`);
 Logger.info('MAIN', `Server     : ${CONFIG.ServerId}`);
 Logger.info('MAIN', `Protocol   : ${CONFIG.Protocol}`);
 Logger.info('MAIN', `Slot       : ${CONFIG.CharSlotIndex}`);
+Logger.info('MAIN', `Auto-connect: ${AUTO_CONNECT_GAME ? 'YES' : 'NO (set AUTO_CONNECT_GAME=true to enable)'}`);
 Logger.info('MAIN', '='.repeat(60));
 
 // Initialize API server
@@ -80,25 +85,47 @@ function onLoginComplete(session: SessionData): void {
     gameClient.start();
 }
 
-// Start API server first, then attach WebSocket to the same HTTP server
+// Start API server first - THIS SHOULD ALWAYS WORK regardless of game connection
 apiServer.start(() => {
     const httpServer = apiServer.getServer();
     if (httpServer) {
         wsServer.start(httpServer);
+        Logger.info('MAIN', '✅ API Server and WebSocket are ready!');
+        Logger.info('MAIN', `   Dashboard: http://localhost:3000/`);
+        Logger.info('MAIN', `   API Docs: http://localhost:3000/api-docs`);
+        Logger.info('MAIN', `   Health: http://localhost:3000/health`);
+        
+        // Start game client only if auto-connect is enabled
+        if (AUTO_CONNECT_GAME) {
+            startGameClient();
+        } else {
+            Logger.info('MAIN', '⏸️  Game client auto-connect is disabled.');
+            Logger.info('MAIN', '   Set AUTO_CONNECT_GAME=true to enable automatic connection.');
+        }
     }
 });
 
-// Start L2 client after a short delay
-Logger.info('MAIN', 'Waiting 1 second before connecting to game server...');
-setTimeout(() => {
-    Logger.info('MAIN', 'Starting Login Client...');
-    
-    // Update connection state
-    GameStateStore.updateConnection({
-        phase: 'LOGIN_CONNECTING',
-        loginServer: { connected: false, host: CONFIG.LoginIp, port: CONFIG.LoginPort }
-    });
-    
-    const loginClient = new LoginClient(CONFIG, onLoginComplete);
-    loginClient.start();
-}, 1000);
+function startGameClient(): void {
+    // Start L2 client after API server is ready
+    Logger.info('MAIN', 'Waiting 1 second before connecting to game server...');
+    setTimeout(() => {
+        Logger.info('MAIN', 'Starting Login Client...');
+        
+        // Update connection state
+        GameStateStore.updateConnection({
+            phase: 'LOGIN_CONNECTING',
+            loginServer: { connected: false, host: CONFIG.LoginIp, port: CONFIG.LoginPort }
+        });
+        
+        try {
+            const loginClient = new LoginClient(CONFIG, onLoginComplete);
+            loginClient.start();
+        } catch (error) {
+            Logger.error('MAIN', `Failed to start LoginClient: ${error}`);
+            Logger.info('MAIN', 'API Server continues running despite game connection failure.');
+        }
+    }, 1000);
+}
+
+// Export for programmatic control
+export { apiServer, wsServer, startGameClient };

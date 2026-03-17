@@ -7,10 +7,26 @@ import { CharSelectInfoPacket } from './packets/incoming/CharSelectInfoPacket';
 import { CharSelectedPacket } from './packets/incoming/CharSelectedPacket';
 import { UserInfoPacket } from './packets/incoming/UserInfoPacket';
 import { NetPingRequestPacket } from './packets/incoming/NetPingRequestPacket';
+import { SpawnItemPacket } from './packets/incoming/SpawnItemPacket';
+import { DropItemPacket } from './packets/incoming/DropItemPacket';
+import { GetItemPacket } from './packets/incoming/GetItemPacket';
+import { NpcInfoPacket } from './packets/incoming/NpcInfoPacket';
+import { CharInfoPacket } from './packets/incoming/CharInfoPacket';
+import { StatusUpdatePacket } from './packets/incoming/StatusUpdatePacket';
+import { CreatureSayPacket } from './packets/incoming/CreatureSayPacket';
+import { AttackPacket } from './packets/incoming/AttackPacket';
+import { MagicSkillUsePacket } from './packets/incoming/MagicSkillUsePacket';
+import { NpcDeletePacket } from './packets/incoming/NpcDeletePacket';
+import { ItemListPacket } from './packets/incoming/ItemListPacket';
+import { SkillListPacket } from './packets/incoming/SkillListPacket';
+import { MoveToLocationPacket } from './packets/incoming/MoveToLocationPacket';
+import { PartySmallWindowAllPacket } from './packets/incoming/PartySmallWindowAllPacket';
+import { PartySmallWindowAddPacket } from './packets/incoming/PartySmallWindowAddPacket';
+import { PartySmallWindowDeletePacket } from './packets/incoming/PartySmallWindowDeletePacket';
 
 /**
  * Opcode router for incoming Game Server packets.
- * Only packets used by the FSM are decoded; all others are ignored.
+ * All packets are decoded and sent to WebSocket via EventBus.
  *
  * IMPORTANT: Opcode 0x04 is used for BOTH CharSelectInfo AND UserInfo!
  * - In WAIT_CHAR_LIST state: 0x04 = CharSelectInfo (character list)
@@ -47,8 +63,50 @@ export class GamePacketHandler {
                 case 0x15:  // CharSelected
                     return new CharSelectedPacket().decode(reader);
 
-                case 0xD3:
+                case 0xD3:  // NetPing
                     return new NetPingRequestPacket().decode(reader);
+
+                // Items
+                case 0x0B:  // SpawnItem
+                    return new SpawnItemPacket().decode(reader);
+                case 0x0C:  // DropItem
+                    return new DropItemPacket().decode(reader);
+                case 0x0D:  // GetItem
+                    return new GetItemPacket().decode(reader);
+                case 0x1B:  // ItemList (inventory)
+                    return new ItemListPacket().decode(reader);
+
+                // NPCs and Players
+                case 0x0C:  // NpcDelete
+                    return new NpcDeletePacket().decode(reader);
+                case 0x16:  // NpcInfo
+                    return new NpcInfoPacket().decode(reader);
+                case 0x03:  // CharInfo (other players)
+                    return new CharInfoPacket().decode(reader);
+                case 0x2E:  // MoveToLocation
+                    return new MoveToLocationPacket().decode(reader);
+
+                // Status and Combat
+                case 0x0E:  // StatusUpdate
+                    return new StatusUpdatePacket().decode(reader);
+                case 0x05:  // Attack
+                    return new AttackPacket().decode(reader);
+                case 0x48:  // MagicSkillUse
+                    return new MagicSkillUsePacket().decode(reader);
+                case 0x58:  // SkillList
+                    return new SkillListPacket().decode(reader);
+
+                // Chat
+                case 0x4A:  // CreatureSay
+                    return new CreatureSayPacket().decode(reader);
+
+                // Party
+                case 0x4E:  // PartySmallWindowAll
+                    return new PartySmallWindowAllPacket().decode(reader);
+                case 0x4F:  // PartySmallWindowAdd
+                    return new PartySmallWindowAddPacket().decode(reader);
+                case 0x50:  // PartySmallWindowDelete
+                    return new PartySmallWindowDeletePacket().decode(reader);
 
                 default:
                     Logger.debug('GamePacketHandler',

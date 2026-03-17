@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
+import { GameCommandManager } from '../../game/GameCommandManager';
+import { Logger } from '../../logger/Logger';
 
 const router = Router();
 
@@ -28,12 +30,12 @@ router.get('/', (req: Request, res: Response) => {
 router.post('/invite', (req: Request, res: Response) => {
     const { playerName } = req.body;
 
-    if (!playerName) {
+    if (!playerName || typeof playerName !== 'string' || playerName.trim().length === 0) {
         res.status(400).json({
             success: false,
             error: {
                 code: 'INVALID_TARGET',
-                message: 'playerName is required'
+                message: 'playerName is required and must be a non-empty string'
             },
             meta: {
                 timestamp: new Date().toISOString(),
@@ -43,19 +45,37 @@ router.post('/invite', (req: Request, res: Response) => {
         return;
     }
 
-    // TODO: Send party invite packet
+    const trimmedName = playerName.trim();
 
-    res.json({
-        success: true,
-        data: {
-            message: 'Party invite sent',
-            playerName
-        },
-        meta: {
-            timestamp: new Date().toISOString(),
-            requestId: req.requestId
-        }
-    });
+    // Send party invite via GameCommandManager
+    const success = GameCommandManager.inviteToParty(trimmedName);
+
+    if (success) {
+        Logger.info('PartyRoute', `Party invite sent to: ${trimmedName}`);
+        res.json({
+            success: true,
+            data: {
+                message: 'Party invite sent',
+                playerName: trimmedName
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send party invite - not in game'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
 });
 
 /**
@@ -63,18 +83,51 @@ router.post('/invite', (req: Request, res: Response) => {
  * Leave current party.
  */
 router.post('/leave', (req: Request, res: Response) => {
-    // TODO: Send leave party packet
+    const party = GameStateStore.getParty();
 
-    res.json({
-        success: true,
-        data: {
-            message: 'Left party'
-        },
-        meta: {
-            timestamp: new Date().toISOString(),
-            requestId: req.requestId
-        }
-    });
+    if (!party.inParty) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'NOT_IN_PARTY',
+                message: 'Not currently in a party'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Send leave party command via GameCommandManager
+    const success = GameCommandManager.leaveParty();
+
+    if (success) {
+        Logger.info('PartyRoute', 'Leave party command sent');
+        res.json({
+            success: true,
+            data: {
+                message: 'Leave party command sent'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    } else {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'COMMAND_FAILED',
+                message: 'Failed to send leave party command - not in game'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+    }
 });
 
 export default router;
