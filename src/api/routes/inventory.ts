@@ -18,7 +18,17 @@ router.get('/', (req: Request, res: Response) => {
     const typeFilter = req.query.type as string | undefined;
     const equippedFilter = req.query.equipped as string | undefined;
 
+    // Direct access to check if items exist
+    const rawInventory = (GameStateStore as any).inventory;
+    Logger.info('InventoryAPI', `Raw inventory from store: ${JSON.stringify({ itemsLength: rawInventory?.items?.length, adena: rawInventory?.adena })}`);
+    
     let items = inventory.items || [];
+    
+    Logger.info('InventoryAPI', `Inventory object: ${JSON.stringify({ itemsCount: items.length, adena: inventory.adena, hasItems: !!inventory.items })}`);
+    Logger.info('InventoryAPI', `Returning ${items.length} items, adena=${inventory.adena || 0}`);
+    if (items.length > 0) {
+        Logger.info('InventoryAPI', `First item: ${JSON.stringify(items[0])}`);
+    }
 
     if (typeFilter) {
         items = items.filter((item: InventoryItem) => item.type === typeFilter);

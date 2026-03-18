@@ -1,22 +1,41 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
+import { SkillDatabase } from '../../data/SkillDatabase';
 import { Logger } from '../../logger/Logger';
 
 const router = Router();
 
 /**
  * GET /api/v1/skills
- * Returns list of character skills.
+ * Returns list of character skills with names from database.
  */
 router.get('/', (req: Request, res: Response) => {
     const character = GameStateStore.getCharacter();
     const skills = character.skills || [];
 
+    // Transform skills to ensure consistent format with names
+    const formattedSkills = skills.map(skill => {
+        // Try to get name from database if not present
+        const skillName = skill.name || SkillDatabase.getSkillName(skill.id || 0);
+        const skillType = SkillDatabase.getSkillType(skill.id || 0);
+        
+        return {
+            skillId: skill.id || skill.skillId,
+            level: skill.level,
+            name: skillName || `Skill #${skill.id || skill.skillId}`,
+            isPassive: skill.isPassive,
+            type: skillType || (skill.isPassive ? 'PASSIVE' : 'ACTIVE')
+        };
+    });
+
     res.json({
         success: true,
         data: {
-            skills
+            skills: formattedSkills,
+            totalCount: formattedSkills.length,
+            activeCount: formattedSkills.filter(s => !s.isPassive).length,
+            passiveCount: formattedSkills.filter(s => s.isPassive).length
         },
         meta: {
             timestamp: new Date().toISOString(),
@@ -52,7 +71,7 @@ router.post('/use', (req: Request, res: Response) => {
     const skills = character.skills || [];
     
     // Validate skill exists in character's skill list
-    const skill = skills.find((s: { id: number }) => s.id === skillId);
+    const skill = skills.find((s: { id?: number; skillId?: number }) => s.id === skillId || s.skillId === skillId);
     if (!skill) {
         res.status(400).json({
             success: false,
@@ -68,17 +87,20 @@ router.post('/use', (req: Request, res: Response) => {
         return;
     }
 
+    // Get skill name from database
+    const skillName = SkillDatabase.getSkillName(skillId) || skill.name || `Skill #${skillId}`;
+
     // Send skill use command via GameCommandManager
     const success = GameCommandManager.useSkill(skillId, ctrlPressed || false, shiftPressed || false);
 
     if (success) {
-        Logger.info('SkillsRoute', `Skill use command sent: ${skillId} (${skill.name || 'Unknown'})`);
+        Logger.info('SkillsRoute', `Skill use command sent: ${skillId} (${skillName})`);
         res.json({
             success: true,
             data: {
                 message: 'Skill use command sent',
                 skillId,
-                skillName: skill.name || 'Unknown',
+                skillName,
                 ctrlPressed: ctrlPressed || false,
                 shiftPressed: shiftPressed || false
             },

@@ -1,4 +1,5 @@
 import { EventBus } from './EventBus';
+import { Logger } from '../logger/Logger';
 import type { 
     CharacterStatsChangedEvent, 
     WorldNpcSpawnedEvent, 
@@ -77,6 +78,7 @@ export interface SkillInfo {
     level: number;
     name?: string;
     isPassive?: boolean;
+    skillId?: number;
 }
 
 export interface NpcInfo {
@@ -363,12 +365,17 @@ class GameStateStoreClass {
     }
 
     // Inventory methods
-    getInventory(): Partial<InventoryState> {
-        return { ...this.inventory };
+    getInventory(): InventoryState {
+        return {
+            adena: this.inventory.adena || 0,
+            weight: this.inventory.weight || { current: 0, max: 0 },
+            items: this.inventory.items || []
+        };
     }
 
     updateInventory(data: Partial<InventoryState>): void {
         this.inventory = { ...this.inventory, ...data };
+        Logger.debug('GameStateStore', `Inventory updated: ${data.items?.length || 0} items, adena=${data.adena || this.inventory.adena}`);
     }
 
     // Combat methods

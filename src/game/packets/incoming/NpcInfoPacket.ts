@@ -2,6 +2,7 @@ import { PacketReader } from '../../../network/PacketReader';
 import { IncomingGamePacket } from './IncomingGamePacket';
 import { GameStateStore } from '../../../core/GameStateStore';
 import { EventBus } from '../../../core/EventBus';
+import { getNpc } from '../../../data/loader';
 
 /**
  * NpcInfo (0x16) - NPC information
@@ -43,12 +44,17 @@ export class NpcInfoPacket implements IncomingGamePacket {
                 reader.skip(reader.remaining());
             }
 
+            // Get NPC data from database
+            const npcData = getNpc(this.npcId);
+            const npcName = npcData?.name || `NPC ${this.npcId}`;
+            const npcLevel = npcData?.level || this.level || 1;
+
             // Add to GameStateStore
             GameStateStore.addNpc({
                 objectId: this.objectId,
                 npcId: this.npcId,
-                name: `NPC ${this.npcId}`,
-                level: this.level,
+                name: npcName,
+                level: npcLevel,
                 hp: { current: 100, max: 100 },
                 isAttackable: this.isAttackable,
                 isAggressive: false,

@@ -11,6 +11,7 @@ import { NetPingRequestPacket } from './packets/incoming/NetPingRequestPacket';
 import { ProtocolVersion } from './packets/outgoing/ProtocolVersion';
 import { CharacterSelected } from './packets/outgoing/CharacterSelected';
 import { AuthRequest } from './packets/outgoing/AuthRequest';
+import { RequestInventoryOpen } from './packets/outgoing/RequestInventoryOpen';
 import { GameCrypt } from './GameCrypt';
 import { CONFIG } from '../config';
 import { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
@@ -127,6 +128,7 @@ export class GameClient extends Connection {
         const packet = this.handler.handle(opcode, body, this.state);
 
         if (packet !== null) {
+            Logger.debug('GameClient', `Handled packet opcode=0x${opcode.toString(16).padStart(2, '0')} in state=${this.state}`);
             this.handlePacket(packet, opcode);
         } else {
             Logger.warn('GameClient', `Unknown opcode=0x${opcode.toString(16).padStart(2, '0')}, bodyLen=${body.length}`);
@@ -230,6 +232,19 @@ export class GameClient extends Connection {
                         },
                         timestamp: new Date().toISOString()
                     });
+                    
+                    // Request inventory after entering world
+                    Logger.info('GameClient', 'Requesting inventory...');
+                    this.sendPacket(new RequestInventoryOpen());
+                    
+                    // Retry inventory request after 3 seconds if empty
+                    setTimeout(() => {
+                        const inv = GameStateStore.getInventory();
+                        if (!inv.items || inv.items.length === 0) {
+                            Logger.info('GameClient', 'Inventory empty, retrying request...');
+                            this.sendPacket(new RequestInventoryOpen());
+                        }
+                    }, 3000);
                 }
                 break;
             }

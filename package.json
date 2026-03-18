@@ -20,6 +20,11 @@
     "start": "node dist/index.js",
     "dev:dashboard": "npm run dev",
     "commit": "node scripts/bump-version.js && git add -A && git commit",
+    "export:xml": "node scripts/export-xml.js",
+    "export:skills": "node scripts/export-skills.js",
+    "export:stats": "node scripts/export-stats.js",
+    "normalize:db": "node scripts/normalize-database.js",
+    "export:data": "npm run normalize:db",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui"
@@ -32,6 +37,7 @@
     "express-rate-limit": "^8.3.1",
     "helmet": "^8.1.0",
     "ws": "^8.19.0",
+    "xml2js": "^0.6.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {

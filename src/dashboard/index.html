@@ -29,6 +29,7 @@
                     </a></li>
                     <li><a href="#" class="nav-link" data-tab="api-docs">API Docs</a></li>
                     <li><a href="#" class="nav-link" data-tab="inventory">Inventory</a></li>
+                    <li><a href="#" class="nav-link" data-tab="skills">Skills</a></li>
                     <li><a href="#" class="nav-link" data-tab="combat">Combat Log</a></li>
                     <li><a href="#" class="nav-link" data-tab="event-log">
                         <i data-lucide="activity" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i> Event Log
@@ -267,6 +268,49 @@
                 </article>
             </section>
 
+            <!-- Skills Tab -->
+            <section id="tab-skills" class="tab-content">
+                <div class="grid">
+                    <!-- Active Skills -->
+                    <article class="panel skills-panel">
+                        <header>
+                            <h3><i data-lucide="zap"></i> Active Skills</h3>
+                            <span id="active-skills-count" class="badge">0</span>
+                        </header>
+                        <div id="active-skills-list" class="skills-list-container">
+                            <div class="skills-empty">
+                                <i data-lucide="zap-off"></i>
+                                <p>No active skills loaded</p>
+                            </div>
+                        </div>
+                    </article>
+
+                    <!-- Passive Skills -->
+                    <article class="panel skills-panel">
+                        <header>
+                            <h3><i data-lucide="shield"></i> Passive Skills</h3>
+                            <span id="passive-skills-count" class="badge">0</span>
+                        </header>
+                        <div id="passive-skills-list" class="skills-list-container">
+                            <div class="skills-empty">
+                                <i data-lucide="shield-off"></i>
+                                <p>No passive skills loaded</p>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- Skill Details Panel -->
+                <article class="panel">
+                    <header>
+                        <h3><i data-lucide="info"></i> Skill Details</h3>
+                    </header>
+                    <div id="skill-details" class="skill-details-empty">
+                        <p>Select a skill to view details</p>
+                    </div>
+                </article>
+            </section>
+
             <!-- Combat Log Tab -->
             <section id="tab-combat" class="tab-content">
                 <article class="panel">
@@ -435,9 +479,12 @@
     <script src="/js/api-client.js"></script>
     <script src="/js/ws-client.js"></script>
     <script src="/js/components/status-panel.js"></script>
+    <script src="/js/components/skills-panel.js"></script>
     <script src="/js/components/event-log.js"></script>
     <script src="/js/components/combat-controls.js"></script>
     <script src="/js/components/ws-monitor.js"></script>
+    <script src="/js/components/inventory-panel.js"></script>
+    <script src="/js/utils/npc-database.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

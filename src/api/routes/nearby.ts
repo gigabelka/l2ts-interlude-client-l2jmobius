@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
+import { getNpc, findNpcsByName } from '../../data/loader';
 
 const router = Router();
 
@@ -21,13 +22,105 @@ router.get('/npcs', (req: Request, res: Response) => {
         ? req.query.alive === 'true' 
         : true;
 
-    const npcs = GameStateStore.getNearbyNpcs(radius, { attackable, alive });
+    const npcs = GameStateStore.getNearbyNpcs(radius, { attackable, alive }).map(npc => {
+        // Get name from NpcDatabase.ts if available
+        const npcData = getNpc(npc.npcId);
+        return {
+            ...npc,
+            name: npcData?.name || npc.name
+        };
+    });
 
     res.json({
         success: true,
         data: {
             count: npcs.length,
             npcs
+        },
+        meta: {
+            timestamp: new Date().toISOString(),
+            requestId: req.requestId
+        }
+    });
+});
+
+/**
+ * GET /api/v1/nearby/npc/:id
+ * Returns NPC name from database by npcId.
+ */
+router.get('/npc/:id', (req: Request, res: Response) => {
+    const npcId = parseInt(req.params.id as string);
+    
+    if (isNaN(npcId)) {
+        res.status(400).json({
+            success: false,
+            error: { code: 'INVALID_PARAMETER', message: 'Invalid npcId' },
+            meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+        });
+        return;
+    }
+
+    const npcData = getNpc(npcId);
+    
+    if (!npcData) {
+        res.status(404).json({
+            success: false,
+            error: { code: 'NOT_FOUND', message: `NPC with id ${npcId} not found in database` },
+            meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+        });
+        return;
+    }
+
+    res.json({
+        success: true,
+        data: {
+            npcId: npcData.id,
+            name: npcData.name,
+            title: npcData.title,
+            type: npcData.type,
+            level: npcData.level
+        },
+        meta: {
+            timestamp: new Date().toISOString(),
+            requestId: req.requestId
+        }
+    });
+});
+
+/**
+ * GET /api/v1/nearby/npc/search?name=xxx
+ * Search NPCs by name (partial match) in database.
+ * Query params:
+ *   - name: string (required, min 2 characters)
+ *   - limit: number (default 20, max 100)
+ */
+router.get('/npc/search', (req: Request, res: Response) => {
+    const name = req.query.name as string;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    
+    if (!name || name.length < 2) {
+        res.status(400).json({
+            success: false,
+            error: { code: 'INVALID_PARAMETER', message: 'Name parameter required (min 2 characters)' },
+            meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+        });
+        return;
+    }
+
+    const npcs = findNpcsByName(name).slice(0, limit);
+
+    res.json({
+        success: true,
+        data: {
+            query: name,
+            count: npcs.length,
+            npcs: npcs.map(npc => ({
+                npcId: npc.id,
+                name: npc.name,
+                title: npc.title,
+                type: npc.type,
+                level: npc.level
+            }))
         },
         meta: {
             timestamp: new Date().toISOString(),

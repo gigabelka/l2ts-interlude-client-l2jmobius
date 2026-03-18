@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
 import { Logger } from '../../logger/Logger';
+import { getNpc } from '../../data/loader';
 
 const router = Router();
 
@@ -30,11 +31,20 @@ router.get('/', (req: Request, res: Response) => {
     const playerTarget = world.players.get(combat.targetObjectId);
     const target = npcTarget || playerTarget;
 
+    // Get NPC name from database if available
+    let targetName = combat.targetName;
+    if (npcTarget && combat.targetType === 'NPC') {
+        const npcData = getNpc(npcTarget.npcId);
+        if (npcData?.name) {
+            targetName = npcData.name;
+        }
+    }
+
     res.json({
         success: true,
         data: {
             objectId: combat.targetObjectId,
-            name: combat.targetName,
+            name: targetName,
             type: combat.targetType,
             ...(target && {
                 level: target.level,
@@ -111,19 +121,23 @@ router.post('/next', (req: Request, res: Response) => {
         }
     }
 
+    // Get NPC name from database for better display
+    const npcData = getNpc(nextTarget.npcId);
+    const npcName = npcData?.name || nextTarget.name;
+
     // Send Action packet to server to select target
     const actionSuccess = GameCommandManager.action(nextTarget.objectId, false);
     
-    // Update local state
-    GameStateStore.setTarget(nextTarget.objectId, nextTarget.name, 'NPC');
+    // Update local state with database name
+    GameStateStore.setTarget(nextTarget.objectId, npcName, 'NPC');
 
-    Logger.info('TargetRoute', `Next target selected: ${nextTarget.name} (${nextTarget.objectId}) at ${nextTarget.distance?.toFixed(1)}m`);
+    Logger.info('TargetRoute', `Next target selected: ${npcName} (${nextTarget.objectId}) at ${nextTarget.distance?.toFixed(1)}m`);
 
     res.json({
         success: true,
         data: {
             objectId: nextTarget.objectId,
-            name: nextTarget.name,
+            name: npcName,
             level: nextTarget.level,
             npcId: nextTarget.npcId,
             distance: nextTarget.distance,

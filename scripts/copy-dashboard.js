@@ -54,6 +54,24 @@ function copyDashboard() {
         process.exit(1);
     }
     
+    // Copy skills.json to dist/data if it exists
+    const srcDataDir = path.join(projectRoot, 'src', 'data');
+    const destDataDir = path.join(projectRoot, 'dist', 'data');
+    if (fs.existsSync(srcDataDir)) {
+        if (!fs.existsSync(destDataDir)) {
+            fs.mkdirSync(destDataDir, { recursive: true });
+        }
+        const dataFiles = fs.readdirSync(srcDataDir);
+        for (const file of dataFiles) {
+            const srcFile = path.join(srcDataDir, file);
+            const destFile = path.join(destDataDir, file);
+            if (fs.statSync(srcFile).isFile()) {
+                fs.copyFileSync(srcFile, destFile);
+                console.log(`  ✓ data/${file}`);
+            }
+        }
+    }
+
     // Verify key files exist
     const requiredFiles = [
         'index.html',

@@ -1,9 +1,14 @@
 import { PacketReader } from '../../../network/PacketReader';
 import { IncomingGamePacket } from './IncomingGamePacket';
 import { GameStateStore } from '../../../core/GameStateStore';
+import { EventBus } from '../../../core/EventBus';
+import { SkillType } from '../../../models/SkillType';
+import type { ISkill } from '../../../models/ISkill';
+import { SkillDatabase } from '../../../data/SkillDatabase';
 
 /**
- * Skill list entry interface
+ * Skill list entry interface (legacy, for backward compatibility)
+ * @deprecated Use ISkill from '../../../models/ISkill'
  */
 export interface SkillInfo {
     skillId: number;
@@ -15,42 +20,89 @@ export interface SkillInfo {
 /**
  * SkillList (0x58) - Character skills list
  * 
- * Structure (Interlude):
- * - skillCount (int32) - Number of skills
+ * Structure (Interlude) - согласно ТЗ:
+ * - count (int32) - Number of skills
  * - For each skill:
- *   - isPassive (int32) - 1 if passive, 0 if active
- *   - skillLevel (int32) - Skill level
  *   - skillId (int32) - Skill ID
+ *   - level (int32) - Skill level
+ *   - passive (byte) - 0 = active, 1 = passive
  */
 export class SkillListPacket implements IncomingGamePacket {
-    public skills: SkillInfo[] = [];
+    public skills: ISkill[] = [];
 
     decode(reader: PacketReader): this {
         try {
-            reader.readUInt8(); // opcode 0x58
+            // opcode уже прочитан в GamePacketHandler
             
-            const skillCount = reader.readInt32LE();
+            const count: number = reader.readInt32LE();
             
             this.skills = [];
             
-            for (let i = 0; i < skillCount && reader.remaining() >= 12; i++) {
-                const isPassive = reader.readInt32LE() !== 0;
-                const skillLevel = reader.readInt32LE();
-                const skillId = reader.readInt32LE();
-
-                this.skills.push({
+            for (let i = 0; i < count; i++) {
+                // Проверяем, достаточно ли данных: skillId(4) + level(4) + passive(1) = 9 байт
+                if (reader.remaining() < 9) {
+                    break;
+                }
+                
+                const skillId: number = reader.readInt32LE();
+                const level: number = reader.readInt32LE();
+                const passiveByte: number = reader.readUInt8();
+                
+                const isPassive: boolean = passiveByte === 1;
+                
+                // Получаем данные скилла из базы
+                const skillData = SkillDatabase.getSkill(skillId);
+                const skillName = skillData?.name;
+                
+                // Определяем тип скилла из базы или из пакета
+                let skillType: SkillType;
+                if (skillData?.type === 'PASSIVE') {
+                    skillType = SkillType.PASSIVE;
+                } else if (skillData?.type === 'TOGGLE') {
+                    skillType = SkillType.TOGGLE;
+                } else if (skillData?.type === 'CHANCE') {
+                    skillType = SkillType.CHANCE;
+                } else {
+                    skillType = isPassive ? SkillType.PASSIVE : SkillType.ACTIVE;
+                }
+                
+                const skill: ISkill = {
                     skillId,
-                    level: skillLevel,
-                    isActive: !isPassive,
-                    isPassive
-                });
+                    level,
+                    type: skillType,
+                    passive: isPassive,
+                    name: skillName
+                };
+                
+                this.skills.push(skill);
             }
 
             // Update GameStateStore with skills
-            const character = GameStateStore.getCharacter();
-            // Store skills as a custom property on character
-            (character as any).skills = this.skills;
-            GameStateStore.updateCharacter(character);
+            GameStateStore.updateSkills(this.skills.map(s => ({
+                id: s.skillId,
+                level: s.level,
+                isPassive: s.passive,
+                name: s.name
+            })));
+
+            // Emit event to EventBus for real-time updates
+            EventBus.emitEvent({
+                type: 'character.skills_updated',
+                channel: 'character',
+                data: {
+                    skills: this.skills.map(s => ({
+                        skillId: s.skillId,
+                        level: s.level,
+                        type: s.type,
+                        passive: s.passive,
+                        name: s.name
+                    })),
+                    totalCount: this.skills.length,
+                    activeCount: this.skills.filter(s => !s.passive).length,
+                    passiveCount: this.skills.filter(s => s.passive).length
+                },
+                timestamp: new Date().toISOString()
+            });
 
         } catch (error) {
             // Ignore decode errors

@@ -85,6 +85,22 @@ export interface CharacterRevivedEvent extends BaseEvent {
     };
 }
 
+export interface CharacterSkillsUpdatedEvent extends BaseEvent {
+    type: 'character.skills_updated';
+    channel: 'character';
+    data: {
+        skills: Array<{
+            skillId: number;
+            level: number;
+            type: string;
+            passive: boolean;
+        }>;
+        totalCount: number;
+        activeCount: number;
+        passiveCount: number;
+    };
+}
+
 // Combat events
 export interface CombatAttackSentEvent extends BaseEvent {
     type: 'combat.attack_sent';
@@ -324,6 +340,7 @@ export type GameEvent =
     | CharacterBuffRemovedEvent
     | CharacterDiedEvent
     | CharacterRevivedEvent
+    | CharacterSkillsUpdatedEvent
     | CombatAttackSentEvent
     | CombatAttackReceivedEvent
     | CombatSkillUsedEvent

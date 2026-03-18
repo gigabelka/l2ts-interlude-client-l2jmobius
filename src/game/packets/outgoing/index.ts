@@ -18,3 +18,4 @@ export { UseSkill } from './UseSkill';
 export { UseItem } from './UseItem';
 export { DropItem } from './DropItem';
 export { RequestJoinParty } from './RequestJoinParty';
+export { RequestInventoryOpen } from './RequestInventoryOpen';

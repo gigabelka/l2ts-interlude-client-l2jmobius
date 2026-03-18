@@ -85,6 +85,12 @@ export class ApiServer {
         this.app.use(express.static(dashboardPath, {
             maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0
         }));
+
+        // Data files (skills.json, etc.) - no auth required
+        const dataPath = path.join(__dirname, '..', '..', 'src', 'data');
+        this.app.use('/data', express.static(dataPath, {
+            maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0
+        }));
         
         // OpenAPI spec endpoint
         this.app.get('/openapi.json', (req: Request, res: Response) => {

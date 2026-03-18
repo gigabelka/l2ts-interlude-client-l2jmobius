@@ -15,6 +15,8 @@
     --mp-color: #1976d2;
     --xp-color: #388e3c;
     --cp-color: #f57c00;
+    --skill-active: #4caf50;
+    --skill-passive: #2196f3;
 }
 
 /* Custom Scrollbar */
@@ -141,6 +143,188 @@ main {
 #tab-event-log .event-log-panel {
     flex: 1;
     margin-bottom: 0;
+}
+
+/* Skills Tab */
+#tab-skills.tab-content.active {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.skills-panel {
+    min-height: 400px;
+}
+
+.skills-list-container {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 0.5rem;
+}
+
+.skills-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: var(--l2-text-muted);
+    text-align: center;
+}
+
+.skills-empty i {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* Skill Card */
+.skill-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: var(--l2-bg-dark);
+    border: 1px solid var(--l2-border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.skill-card:last-child {
+    margin-bottom: 0;
+}
+
+.skill-card:hover {
+    border-color: var(--l2-primary);
+    transform: translateX(4px);
+}
+
+.skill-card.selected {
+    border-color: var(--l2-primary);
+    background: rgba(201, 162, 39, 0.1);
+    box-shadow: 0 0 10px rgba(201, 162, 39, 0.2);
+}
+
+.skill-card.active .skill-icon {
+    color: var(--skill-active);
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.skill-card.passive .skill-icon {
+    color: var(--skill-passive);
+    background: rgba(33, 150, 243, 0.1);
+}
+
+.skill-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--l2-bg-panel);
+    border-radius: 8px;
+    border: 1px solid var(--l2-border);
+}
+
+.skill-icon i {
+    width: 20px;
+    height: 20px;
+}
+
+.skill-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+}
+
+.skill-name {
+    font-weight: 500;
+    color: var(--l2-text);
+}
+
+.skill-level {
+    font-size: 0.8rem;
+    color: var(--l2-text-muted);
+}
+
+/* Skill Details */
+.skill-details-empty {
+    text-align: center;
+    padding: 3rem;
+    color: var(--l2-text-muted);
+}
+
+.skill-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--l2-border);
+}
+
+.skill-detail-icon {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid;
+    border-radius: 12px;
+}
+
+.skill-detail-icon i {
+    width: 32px;
+    height: 32px;
+}
+
+.skill-detail-info h4 {
+    margin: 0 0 0.25rem 0;
+    color: var(--l2-text);
+}
+
+.skill-detail-type {
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.skill-detail-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.skill-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    background: var(--l2-bg-dark);
+    border-radius: 8px;
+}
+
+.skill-stat label {
+    font-size: 0.75rem;
+    color: var(--l2-text-muted);
+    text-transform: uppercase;
+}
+
+.skill-stat span,
+.skill-stat code {
+    font-size: 0.95rem;
+    color: var(--l2-text);
+    font-weight: 500;
+}
+
+.skill-detail-actions {
+    display: flex;
+    gap: 0.5rem;
 }
 
 /* Panels */
@@ -1106,4 +1290,225 @@ footer code {
         margin: 1rem;
         min-width: auto;
     }
+
+    .skills-panel {
+        min-height: 300px;
+    }
+
+    .skill-detail-header {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .skill-detail-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ========================================
+   Inventory Panel Styles
+   ======================================== */
+
+.inventory-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--l2-border);
+}
+
+.inventory-header h3 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.inventory-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.adena-display {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--l2-primary);
+    font-weight: bold;
+}
+
+.adena-display i {
+    color: #ffd700;
+}
+
+#inventory-filter {
+    margin: 0;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.9rem;
+}
+
+.inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
+    padding: 1rem;
+    min-height: 300px;
+}
+
+.inventory-item {
+    background: var(--l2-bg-panel);
+    border: 2px solid var(--l2-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.inventory-item:hover {
+    border-color: var(--l2-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(201, 162, 39, 0.2);
+}
+
+.inventory-item.equipped {
+    border-color: var(--l2-primary);
+    background: linear-gradient(135deg, var(--l2-bg-panel) 0%, rgba(201, 162, 39, 0.1) 100%);
+}
+
+.item-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+}
+
+.icon-weapon { background: linear-gradient(135deg, #8b4513, #a0522d); }
+.icon-armor { background: linear-gradient(135deg, #4682b4, #5f9ea0); }
+.icon-consumable { background: linear-gradient(135deg, #2e8b57, #3cb371); }
+.icon-material { background: linear-gradient(135deg, #696969, #808080); }
+.icon-quest { background: linear-gradient(135deg, #9932cc, #ba55d3); }
+.icon-etc { background: linear-gradient(135deg, #556b2f, #6b8e23); }
+.icon-equipped { background: linear-gradient(135deg, #ffd700, #ffec8b); }
+
+.equipped-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--l2-primary);
+    color: #000;
+    font-size: 10px;
+    font-weight: bold;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.enchant-badge {
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #4caf50;
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+.item-info {
+    width: 100%;
+}
+
+.item-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--l2-text);
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-meta {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--l2-text-muted);
+}
+
+.item-count {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+.item-mana {
+    color: #64b5f6;
+}
+
+.inventory-empty {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: var(--l2-text-muted);
+}
+
+.inventory-empty i {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* Item Action Menu */
+.item-action-menu {
+    position: fixed;
+    background: var(--l2-bg-panel);
+    border: 1px solid var(--l2-border);
+    border-radius: 8px;
+    padding: 0.5rem;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.item-action-menu .action-btn {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.25rem;
+    background: transparent;
+    border: none;
+    color: var(--l2-text);
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.item-action-menu .action-btn:hover {
+    background: var(--l2-primary);
+    color: #000;
+}
+
+.item-action-menu .action-btn:last-child {
+    margin-bottom: 0;
 }

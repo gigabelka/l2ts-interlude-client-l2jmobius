@@ -103,6 +103,20 @@ class DashboardApp {
             this.loadApiDocs();
         }
         
+        if (tab === 'skills') {
+            // Refresh skills when switching to skills tab
+            if (typeof skillsPanel !== 'undefined') {
+                skillsPanel.refresh();
+            }
+        }
+        
+        if (tab === 'inventory') {
+            // Refresh inventory when switching to inventory tab
+            if (typeof inventoryPanel !== 'undefined') {
+                inventoryPanel.refresh();
+            }
+        }
+        
         // Re-initialize icons after tab switch
         if (typeof lucide !== 'undefined') {
             lucide.createIcons();
@@ -446,6 +460,13 @@ class DashboardApp {
             console.error('[DashboardApp] statusPanel not available for polling');
         }
         
+        // Start inventory polling
+        if (typeof inventoryPanel !== 'undefined') {
+            inventoryPanel.start();
+        } else {
+            console.error('[DashboardApp] inventoryPanel not available');
+        }
+        
         // Poll general status
         this.updateStatus();
         this.statusCheckInterval = setInterval(() => this.updateStatus(), 5000);
@@ -657,9 +678,32 @@ class DashboardApp {
             const targetType = document.getElementById('target-type');
             const targetLevel = document.getElementById('target-level');
             
-            if (targetName) targetName.textContent = target.name || 'Unknown';
+            // Resolve NPC name from database if available
+            let displayName = target.name;
+            let displayLevel = target.level;
+            
+            console.log('[updateTargetDisplay] target:', target, 'npcId:', target.npcId, 'type:', typeof target.npcId);
+            
+            if (target.type === 'NPC' && target.npcId && typeof npcDatabase !== 'undefined') {
+                // Convert npcId to number (keys in Map are numbers)
+                const npcIdNum = parseInt(target.npcId);
+                console.log('[updateTargetDisplay] Looking up npcId:', npcIdNum);
+                
+                const dbName = npcDatabase.getNpcName(npcIdNum);
+                console.log('[updateTargetDisplay] dbName:', dbName);
+                
+                if (dbName) {
+                    displayName = dbName;
+                }
+                const dbLevel = npcDatabase.getNpcLevel(npcIdNum);
+                if (dbLevel) {
+                    displayLevel = dbLevel;
+                }
+            }
+            
+            if (targetName) targetName.textContent = displayName || 'Unknown';
             if (targetType) targetType.textContent = target.type || 'NPC';
-            if (targetLevel) targetLevel.textContent = `Level ${target.level || '?'}`;
+            if (targetLevel) targetLevel.textContent = `Level ${displayLevel || '?'}`;
             
             const hpBar = document.getElementById('target-hp-bar');
             const hpValue = document.getElementById('target-hp-value');
@@ -785,11 +829,22 @@ class DashboardApp {
             }
             
             const target = await apiClient.nextTarget();
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`🎯 Target: ${target.name} (Lv.${target.level}, ${target.distance?.toFixed(1)}m)`);
+            
+            // Resolve name from database for display
+            let displayName = target.name;
+            let displayLevel = target.level;
+            if (target.npcId && typeof npcDatabase !== 'undefined') {
+                const dbName = npcDatabase.getNpcName(target.npcId);
+                if (dbName) displayName = dbName;
+                const dbLevel = npcDatabase.getNpcLevel(target.npcId);
+                if (dbLevel) displayLevel = dbLevel;
             }
             
-            // Update target UI
+            if (typeof eventLog !== 'undefined') {
+                eventLog.addSystemMessage(`🎯 Target: ${displayName} (Lv.${displayLevel}, ${target.distance?.toFixed(1)}m)`);
+            }
+            
+            // Update target UI (pass original target with npcId for proper lookup)
             this.updateTargetDisplay(target);
         } catch (error) {
             console.error('[DashboardApp] Next target error:', error);
@@ -1015,9 +1070,10 @@ class DashboardApp {
             
             const skillId = await this.showSkillDialog(skills);
             if (skillId) {
+                const skillName = this.getSkillName(skillId) || `Skill #${skillId}`;
                 await apiClient.useSkill(skillId, 1);
                 if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage(`✨ Using skill`);
+                    eventLog.addSystemMessage(`✨ Using skill: ${skillName}`);
                 }
             }
         } catch (error) {
@@ -1029,19 +1085,54 @@ class DashboardApp {
     }
 
     /**
+     * Load skill names from database
+     */
+    async loadSkillNames() {
+        if (this.skillNameCache) return this.skillNameCache;
+        
+        try {
+            const response = await fetch('/data/skills.json');
+            if (response.ok) {
+                this.skillNameCache = await response.json();
+                return this.skillNameCache;
+            }
+        } catch (error) {
+            console.warn('[DashboardApp] Failed to load skill names:', error);
+        }
+        return {};
+    }
+
+    /**
+     * Get skill name from cache
+     */
+    getSkillName(skillId) {
+        if (this.skillNameCache && this.skillNameCache[skillId]) {
+            return this.skillNameCache[skillId].name;
+        }
+        return null;
+    }
+
+    /**
      * Show skill selection dialog
      */
-    showSkillDialog(skills) {
+    async showSkillDialog(skills) {
+        // Ensure skill names are loaded
+        await this.loadSkillNames();
+        
         return new Promise((resolve) => {
             const modal = document.createElement('div');
             modal.className = 'skill-modal';
             
-            const skillsHtml = skills.map(s => `
-                <div class="skill-item" data-skill-id="${s.id || s.skillId}">
-                    <span class="skill-name">${s.name || `Skill ${s.id || s.skillId}`}</span>
-                    <span class="skill-level">Lv.${s.level || 1}</span>
-                </div>
-            `).join('');
+            const skillsHtml = skills.map(s => {
+                const skillId = s.id || s.skillId;
+                const skillName = s.name || this.getSkillName(skillId) || `Skill #${skillId}`;
+                return `
+                    <div class="skill-item" data-skill-id="${skillId}">
+                        <span class="skill-name">${skillName}</span>
+                        <span class="skill-level">Lv.${s.level || 1}</span>
+                    </div>
+                `;
+            }).join('');
             
             modal.innerHTML = `
                 <div class="skill-modal-content">
