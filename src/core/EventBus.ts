@@ -376,13 +376,13 @@ class TypedEventBus extends EventEmitter {
         return TypedEventBus.instance;
     }
 
-    emitEvent(event: GameEvent): void {
+    emitEvent(event: GameEvent | BaseEvent): void {
         Logger.debug('EventBus', `[${event.channel}] ${event.type}`);
         this.emit(event.type, event);
         this.emit('*', event);
     }
 
-    onEvent(eventType: GameEvent['type'], listener: (event: GameEvent) => void): this {
+    onEvent(eventType: GameEvent['type'] | string, listener: (event: GameEvent | BaseEvent) => void): this {
         return this.on(eventType, listener);
     }
 

@@ -1,0 +1,321 @@
+/**
+ * @fileoverview Главный класс Dashboard - Event-Driven UI
+ * Подписывается на события и перерисовывается автоматически
+ * @module ui/Dashboard
+ */
+
+import { EventBus, type BaseEvent, type EventChannel } from '../core/EventBus';
+import { characterManager } from '../core/state/CharacterManager';
+import { worldManager } from '../core/state/WorldManager';
+import { GameStateStore } from '../core/GameStateStore';
+import { Logger } from '../logger/Logger';
+
+/**
+ * Опции Dashboard
+ */
+export interface DashboardOptions {
+    /** Обновлять ли консоль автоматически */
+    autoRender?: boolean;
+    /** Интервал обновления (ms) */
+    renderInterval?: number;
+    /** Показывать ли подробную информацию */
+    verbose?: boolean;
+    /** Цветной вывод */
+    colored?: boolean;
+}
+
+/**
+ * Компонент Dashboard UI
+ * Реализует паттерн Observer - подписывается на события EventBus
+ */
+export class Dashboard {
+    private options: Required<DashboardOptions>;
+    private unsubscribeFns: Array<() => void> = [];
+    private renderTimer?: NodeJS.Timeout;
+    private isDirty = false;
+    private lastRender = 0;
+
+    // Кэшированные данные для отображения
+    private lastStats = {
+        character: '',
+        world: '',
+        combat: ''
+    };
+
+    constructor(options: DashboardOptions = {}) {
+        this.options = {
+            autoRender: true,
+            renderInterval: 1000,
+            verbose: false,
+            colored: true,
+            ...options
+        };
+    }
+
+    /**
+     * Запустить Dashboard
+     */
+    start(): void {
+        Logger.info('Dashboard', 'Starting Event-Driven Dashboard...');
+        
+        this.subscribeToEvents();
+        
+        if (this.options.autoRender) {
+            this.renderTimer = setInterval(() => {
+                if (this.isDirty) {
+                    this.render();
+                    this.isDirty = false;
+                }
+            }, this.options.renderInterval);
+        }
+
+        // Первичный рендер
+        this.render();
+    }
+
+    /**
+     * Остановить Dashboard
+     */
+    stop(): void {
+        Logger.info('Dashboard', 'Stopping...');
+        
+        this.unsubscribeFns.forEach(fn => fn());
+        this.unsubscribeFns = [];
+        
+        if (this.renderTimer) {
+            clearInterval(this.renderTimer);
+            this.renderTimer = undefined;
+        }
+    }
+
+    /**
+     * Принудительно обновить отображение
+     */
+    forceRender(): void {
+        this.render();
+    }
+
+    /**
+     * Подписаться на события
+     */
+    private subscribeToEvents(): void {
+        // Подписка на канал character
+        this.subscribe('character.stats_changed', () => this.markDirty());
+        this.subscribe('character.level_up', () => this.markDirty());
+        this.subscribe('character.position_changed', () => this.markDirty());
+        
+        // Подписка на канал world
+        this.subscribe('world.npc_spawned', () => this.markDirty());
+        this.subscribe('world.npc_despawned', () => this.markDirty());
+        this.subscribe('world.player_seen', () => this.markDirty());
+        this.subscribe('world.item_dropped', () => this.markDirty());
+        
+        // Подписка на канал combat
+        this.subscribe('combat.attack_sent', (event) => this.onCombatEvent(event));
+        this.subscribe('combat.skill_used', (event) => this.onCombatEvent(event));
+        
+        // Подписка на канал system
+        this.subscribe('system.connected', (event) => this.onSystemEvent(event));
+        this.subscribe('system.disconnected', (event) => this.onSystemEvent(event));
+    }
+
+    /**
+     * Подписаться на конкретное событие
+     */
+    private subscribe<T extends BaseEvent['type']>(
+        eventType: T, 
+        handler: (event: BaseEvent) => void
+    ): void {
+        EventBus.onEvent(eventType, handler);
+        this.unsubscribeFns.push(() => {
+            EventBus.removeListener(eventType, handler);
+        });
+    }
+
+    /**
+     * Отметить что нужно перерисовать
+     */
+    private markDirty(): void {
+        this.isDirty = true;
+    }
+
+    /**
+     * Обработчик боевых событий
+     */
+    private onCombatEvent(event: BaseEvent): void {
+        this.markDirty();
+        
+        if (this.options.verbose) {
+            const { Logger } = require('../logger/Logger');
+            Logger.info('Dashboard', `[Combat] ${event.type}: ${JSON.stringify(event.data)}`);
+        }
+    }
+
+    /**
+     * Обработчик системных событий
+     */
+    private onSystemEvent(event: BaseEvent): void {
+        this.markDirty();
+        
+        const { Logger } = require('../logger/Logger');
+        switch (event.type) {
+            case 'system.connected':
+                Logger.info('Dashboard', `✅ Connected: ${event.data.characterName}`);
+                break;
+            case 'system.disconnected':
+                Logger.info('Dashboard', `❌ Disconnected: ${event.data.reason}`);
+                break;
+        }
+    }
+
+    /**
+     * Отрисовать Dashboard
+     */
+    private render(): void {
+        const now = Date.now();
+        if (now - this.lastRender < 100) return; // Минимальный интервал
+        this.lastRender = now;
+
+        // Собираем все данные
+        const character = characterManager.getCharacter();
+        const worldStats = worldManager.getStats();
+        const connection = GameStateStore.getConnection();
+
+        // Формируем вывод
+        const lines: string[] = [];
+        
+        lines.push(this.renderHeader());
+        lines.push(this.renderCharacter(character));
+        lines.push(this.renderWorld(worldStats));
+        lines.push(this.renderConnection(connection));
+        lines.push(this.renderFooter());
+
+        // Очищаем консоль и выводим
+        console.clear();
+        console.log(lines.join('\n'));
+    }
+
+    /**
+     * Отрисовать заголовок
+     */
+    private renderHeader(): string {
+        const now = new Date().toLocaleTimeString();
+        return this.color('cyan', `╔════════════════════════════════════════════════════════════╗\n` +
+                                 `║           🎮 L2 Headless Client Dashboard                  ║\n` +
+                                 `║           ${now}                                   ║\n` +
+                                 `╚════════════════════════════════════════════════════════════╝`);
+    }
+
+    /**
+     * Отрисовать информацию о персонаже
+     */
+    private renderCharacter(character: ReturnType<typeof characterManager.getCharacter>): string {
+        if (!character) {
+            return this.color('yellow', '\n⏳ Waiting for character data...\n');
+        }
+
+        const hpBar = this.renderBar(character.hp?.current ?? 0, character.hp?.max ?? 100, 20, 'red');
+        const mpBar = this.renderBar(character.mp?.current ?? 0, character.mp?.max ?? 100, 20, 'blue');
+
+        return `
+${this.color('bright', '🧙 Character')}
+${this.color('cyan', '─'.repeat(60))}
+  Name:  ${this.color('green', character.name.padEnd(20))} Level: ${this.color('yellow', String(character.level))}
+  Class: ${character.className.padEnd(20)} Race:  ${character.race}
+  
+  HP: ${hpBar} ${character.hp?.current ?? 0}/${character.hp?.max ?? 0}
+  MP: ${mpBar} ${character.mp?.current ?? 0}/${character.mp?.max ?? 0}
+  
+  Position: ${character.position?.x ?? 0}, ${character.position?.y ?? 0}, ${character.position?.z ?? 0}
+`;
+    }
+
+    /**
+     * Отрисовать информацию о мире
+     */
+    private renderWorld(stats: { npcs: number; players: number; items: number }): string {
+        return `
+${this.color('bright', '🌍 World')}
+${this.color('cyan', '─'.repeat(60))}
+  NPCs:    ${this.color('yellow', String(stats.npcs).padStart(3))}
+  Players: ${this.color('yellow', String(stats.players).padStart(3))}
+  Items:   ${this.color('yellow', String(stats.items).padStart(3))}
+`;
+    }
+
+    /**
+     * Отрисовать информацию о подключении
+     */
+    private renderConnection(connection: Partial<import('../core/GameStateStore').ConnectionState>): string {
+        const phase = connection.phase || 'DISCONNECTED';
+        const statusColor = phase === 'IN_GAME' ? 'green' : phase === 'DISCONNECTED' ? 'red' : 'yellow';
+        
+        return `
+${this.color('bright', '🔌 Connection')}
+${this.color('cyan', '─'.repeat(60))}
+  Phase: ${this.color(statusColor, phase)}
+  Uptime: ${connection.uptime ?? 0}s
+`;
+    }
+
+    /**
+     * Отрисовать подвал
+     */
+    private renderFooter(): string {
+        return this.color('cyan', '═'.repeat(62));
+    }
+
+    /**
+     * Отрисовать прогресс-бар
+     */
+    private renderBar(current: number, max: number, width: number, color: 'red' | 'green' | 'blue' | 'yellow'): string {
+        const percent = Math.min(1, Math.max(0, current / max));
+        const filled = Math.round(width * percent);
+        const empty = width - filled;
+        
+        const bar = '█'.repeat(filled) + '░'.repeat(empty);
+        return this.color(color, bar);
+    }
+
+    /**
+     * Применить цвет к тексту
+     */
+    private color(color: string, text: string): string {
+        if (!this.options.colored) return text;
+        
+        const colors: Record<string, string> = {
+            reset: '\x1b[0m',
+            bright: '\x1b[1m',
+            red: '\x1b[31m',
+            green: '\x1b[32m',
+            yellow: '\x1b[33m',
+            blue: '\x1b[34m',
+            cyan: '\x1b[36m'
+        };
+        
+        return `${colors[color] ?? colors.reset}${text}${colors.reset}`;
+    }
+}
+
+// Синглтон
+let dashboardInstance: Dashboard | null = null;
+
+/**
+ * Получить или создать Dashboard
+ */
+export function getDashboard(options?: DashboardOptions): Dashboard {
+    if (!dashboardInstance) {
+        dashboardInstance = new Dashboard(options);
+    }
+    return dashboardInstance;
+}
+
+/**
+ * Уничтожить Dashboard (для тестов)
+ */
+export function destroyDashboard(): void {
+    if (dashboardInstance) {
+        dashboardInstance.stop();
+        dashboardInstance = null;
+    }
+}

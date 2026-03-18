@@ -37,6 +37,12 @@ export class PacketReader {
     return v;
   }
 
+  readFloatLE(): number {
+    const v = this.buf.readFloatLE(this.pos);
+    this.pos += 4;
+    return v;
+  }
+
   readBytes(n: number): Buffer {
     if (this.pos + n > this.buf.length) {
       throw new Error(`Not enough data to read ${n} bytes. Available: ${this.buf.length - this.pos}`);
