@@ -67,3 +67,12 @@ export {
     DropItemHandler,
     StatusUpdateHandler,
 } from './handlers';
+
+export {
+    decodePacket,
+    getPacketDefinition,
+    getSupportedOpcodes,
+    isOpcodeKnown,
+    type RawPacketMessage,
+    type DecodedPacketEvent,
+} from './PacketDecoder';
