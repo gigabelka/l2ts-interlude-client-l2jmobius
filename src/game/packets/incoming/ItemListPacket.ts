@@ -21,7 +21,8 @@
 
 import { PacketReader } from '../../../network/PacketReader';
 import { IncomingGamePacket } from './IncomingGamePacket';
-import { GameStateStore, InventoryItem } from '../../../core/GameStateStore';
+import { GameStateStore, type InventoryItem } from '../../../core/GameStateStore';
+import { EventBus } from '../../../core/EventBus';
 import { Logger } from '../../../logger/Logger';
 
 /** Битовые маски слотов экипировки */
@@ -126,6 +127,18 @@ export class ItemListPacket implements IncomingGamePacket {
             // Обновляем GameStateStore
             GameStateStore.updateInventory({
                 items: parsedItems,
+            });
+
+            // Эмитим событие полного обновления инвентаря
+            EventBus.emitEvent({
+                type: 'inventory.updated',
+                channel: 'inventory',
+                data: {
+                    totalItems: parsedItems.length,
+                    equippedCount: this.equipment.size,
+                    isFullUpdate: true,
+                },
+                timestamp: new Date().toISOString()
             });
 
             // Выводим экипировку в лог

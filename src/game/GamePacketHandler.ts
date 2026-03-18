@@ -18,6 +18,7 @@ import { AttackPacket } from './packets/incoming/AttackPacket';
 import { MagicSkillUsePacket } from './packets/incoming/MagicSkillUsePacket';
 import { NpcDeletePacket } from './packets/incoming/NpcDeletePacket';
 import { ItemListPacket } from './packets/incoming/ItemListPacket';
+import { InventoryUpdatePacket } from './packets/incoming/InventoryUpdatePacket';
 import { SkillListPacket } from './packets/incoming/SkillListPacket';
 import { MoveToLocationPacket } from './packets/incoming/MoveToLocationPacket';
 import { PartySmallWindowAllPacket } from './packets/incoming/PartySmallWindowAllPacket';
@@ -75,6 +76,8 @@ export class GamePacketHandler {
                     return new GetItemPacket().decode(reader);
                 case 0x1B:  // ItemList (inventory)
                     return new ItemListPacket().decode(reader);
+                case 0x19:  // InventoryUpdate (changes)
+                    return new InventoryUpdatePacket().decode(reader);
 
                 // NPCs and Players
                 case 0x0C:  // NpcDelete

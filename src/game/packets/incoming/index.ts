@@ -20,6 +20,7 @@ export { MagicSkillUsePacket } from './MagicSkillUsePacket';
 // New packet parsers
 export { NpcDeletePacket } from './NpcDeletePacket';
 export { ItemListPacket } from './ItemListPacket';
+export { InventoryUpdatePacket, InventoryChangeType, type ItemChange } from './InventoryUpdatePacket';
 export { SkillListPacket, type SkillInfo } from './SkillListPacket';
 export { MoveToLocationPacket } from './MoveToLocationPacket';
 export { PartySmallWindowAllPacket } from './PartySmallWindowAllPacket';

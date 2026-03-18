@@ -12,7 +12,8 @@ export type EventChannel =
     | 'chat' 
     | 'world' 
     | 'movement' 
-    | 'party';
+    | 'party'
+    | 'inventory';
 
 export interface BaseEvent {
     type: string;
@@ -94,10 +95,33 @@ export interface CharacterSkillsUpdatedEvent extends BaseEvent {
             level: number;
             type: string;
             passive: boolean;
+            name?: string;
         }>;
         totalCount: number;
         activeCount: number;
         passiveCount: number;
+    };
+}
+
+export interface CharacterSkillsClearedEvent extends BaseEvent {
+    type: 'character.skills_cleared';
+    channel: 'character';
+    data: {
+        skills: [];
+        totalCount: 0;
+        activeCount: 0;
+        passiveCount: 0;
+        reason: string;
+    };
+}
+
+export interface InventoryClearedEvent extends BaseEvent {
+    type: 'inventory.cleared';
+    channel: 'character';
+    data: {
+        items: [];
+        adena: 0;
+        reason: string;
     };
 }
 
@@ -274,6 +298,41 @@ export interface PongEvent extends BaseEvent {
     data: Record<string, never>;
 }
 
+// Inventory events
+export interface InventoryChangedEvent extends BaseEvent {
+    type: 'inventory.changed' | 'inventory.item_added' | 'inventory.item_removed' | 'inventory.item_modified' | 'inventory.updated';
+    channel: 'character' | 'inventory';
+    data: {
+        action?: 'added' | 'removed' | 'updated';
+        objectId?: number;
+        itemId?: number;
+        name?: string;
+        count?: number;
+        oldCount?: number;
+        newCount?: number;
+        enchant?: number;
+        oldEnchant?: number;
+        newEnchant?: number;
+        equipped?: boolean;
+        slot?: number;
+        totalItems?: number;
+        added?: number;
+        modified?: number;
+        removed?: number;
+        equippedCount?: number;
+    };
+}
+
+export interface InventoryAdenaChangedEvent extends BaseEvent {
+    type: 'inventory.adena_changed';
+    channel: 'character' | 'inventory';
+    data: {
+        oldAmount: number;
+        newAmount: number;
+        delta: number;
+    };
+}
+
 // Chat events
 export interface ChatMessageEvent extends BaseEvent {
     type: 'chat.message';
@@ -341,6 +400,8 @@ export type GameEvent =
     | CharacterDiedEvent
     | CharacterRevivedEvent
     | CharacterSkillsUpdatedEvent
+    | CharacterSkillsClearedEvent
+    | InventoryClearedEvent
     | CombatAttackSentEvent
     | CombatAttackReceivedEvent
     | CombatSkillUsedEvent
@@ -361,7 +422,9 @@ export type GameEvent =
     | ChatSystemMessageEvent
     | CombatAttackStartedEvent
     | WorldPlayerSeenEvent
-    | RawPacketEvent;
+    | RawPacketEvent
+    | InventoryChangedEvent
+    | InventoryAdenaChangedEvent;
 
 /**
  * Typed EventBus wrapper around EventEmitter.

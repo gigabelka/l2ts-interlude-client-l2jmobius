@@ -79,10 +79,22 @@ class SkillsPanel {
             this.handleSkillsUpdated(e.detail);
         });
 
+        // Skills cleared event - when disconnected from game
+        wsClient.addEventListener('character.skills_cleared', (e) => {
+            console.log('[SkillsPanel] Skills cleared event:', e.detail);
+            this.clear();
+        });
+
         // System connected - refresh skills
         wsClient.addEventListener('system.connected', () => {
             console.log('[SkillsPanel] System connected, refreshing skills');
             this.refresh();
+        });
+
+        // System disconnected - clear skills
+        wsClient.addEventListener('system.disconnected', () => {
+            console.log('[SkillsPanel] System disconnected, clearing skills');
+            this.clear();
         });
     }
 
@@ -120,7 +132,17 @@ class SkillsPanel {
             }
 
             console.log('[SkillsPanel] Fetching skills from API...');
-            const data = await apiClient.getSkills();
+            const response = await apiClient.getSkills();
+            
+            // Check if response has data property (new API format) or is array (old format)
+            const data = response.data || response;
+            
+            // If not in game or no skills, clear the display
+            if (!response.inGame && response.inGame !== undefined) {
+                console.log('[SkillsPanel] Not in game, clearing skills');
+                this.clear();
+                return;
+            }
             
             if (data && data.skills) {
                 // Enhance skills with names from local database
@@ -133,9 +155,13 @@ class SkillsPanel {
                 this.activeSkills = enhancedSkills.filter(s => !s.isPassive);
                 this.passiveSkills = enhancedSkills.filter(s => s.isPassive);
                 this.render();
+            } else {
+                // No skills data - clear display
+                this.clear();
             }
         } catch (error) {
             console.error('[SkillsPanel] Failed to fetch skills:', error);
+            this.clear();
         }
     }
 

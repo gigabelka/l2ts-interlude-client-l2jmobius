@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
+import { InventoryService } from '../../services/InventoryService';
 import type { InventoryItem } from '../../core/GameStateStore';
 import { Logger } from '../../logger/Logger';
 
@@ -13,38 +14,159 @@ const router = Router();
  *   - type: filter by item type
  *   - equipped: boolean, filter equipped items only
  */
+/**
+ * GET /api/v1/inventory
+ * Returns character inventory with optional filtering.
+ * Returns empty inventory when not connected to game server.
+ * Query params:
+ *   - type: filter by item type (weapon, armor, consumable, material, quest, etc)
+ *   - equipped: boolean, filter equipped items only
+ *   - format: 'full' | 'compact' | 'stats' (default: 'full')
+ */
 router.get('/', (req: Request, res: Response) => {
-    const inventory = GameStateStore.getInventory();
+    const format = (req.query.format as string) || 'full';
     const typeFilter = req.query.type as string | undefined;
     const equippedFilter = req.query.equipped as string | undefined;
-
-    // Direct access to check if items exist
-    const rawInventory = (GameStateStore as any).inventory;
-    Logger.info('InventoryAPI', `Raw inventory from store: ${JSON.stringify({ itemsLength: rawInventory?.items?.length, adena: rawInventory?.adena })}`);
     
-    let items = inventory.items || [];
+    const connection = GameStateStore.getConnection();
+    const character = GameStateStore.getCharacter();
     
-    Logger.info('InventoryAPI', `Inventory object: ${JSON.stringify({ itemsCount: items.length, adena: inventory.adena, hasItems: !!inventory.items })}`);
-    Logger.info('InventoryAPI', `Returning ${items.length} items, adena=${inventory.adena || 0}`);
-    if (items.length > 0) {
-        Logger.info('InventoryAPI', `First item: ${JSON.stringify(items[0])}`);
+    // Return empty inventory when not in game
+    if (connection.phase !== 'IN_GAME' || !character.objectId) {
+        res.json({
+            success: true,
+            data: {
+                adena: 0,
+                weight: { current: 0, max: 0 },
+                items: [],
+                equipment: {},
+                stats: { totalItems: 0, equippedItems: 0, totalValue: 0 },
+                inGame: false
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId,
+                format
+            }
+        });
+        return;
     }
 
+    // Return different formats based on query param
+    if (format === 'compact') {
+        // Compact format for dashboard updates
+        res.json({
+            success: true,
+            data: JSON.parse(InventoryService.getCompactInventoryJson()),
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId,
+                format: 'compact'
+            }
+        });
+        return;
+    }
+
+    if (format === 'stats') {
+        // Statistics only
+        res.json({
+            success: true,
+            data: InventoryService.getInventoryStats(),
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId,
+                format: 'stats'
+            }
+        });
+        return;
+    }
+
+    // Full format (default)
+    const inventory = InventoryService.getInventoryData();
+    let items = inventory.items || [];
+
+    // Apply filters
     if (typeFilter) {
-        items = items.filter((item: InventoryItem) => item.type === typeFilter);
+        items = items.filter((item) => item.type === typeFilter);
     }
 
     if (equippedFilter !== undefined) {
         const equipped = equippedFilter === 'true';
-        items = items.filter((item: InventoryItem) => item.equipped === equipped);
+        items = items.filter((item) => item.equipped === equipped);
     }
+
+    Logger.info('InventoryAPI', `Returning ${items.length} items (format=${format}), adena=${inventory.adena}`);
 
     res.json({
         success: true,
         data: {
-            adena: inventory.adena || 0,
-            weight: inventory.weight || { current: 0, max: 0 },
-            items
+            adena: inventory.adena,
+            weight: inventory.weight,
+            items,
+            equipment: inventory.equipment,
+            stats: InventoryService.getInventoryStats(),
+            inGame: true
+        },
+        meta: {
+            timestamp: new Date().toISOString(),
+            requestId: req.requestId,
+            format: 'full'
+        }
+    });
+});
+
+/**
+ * GET /api/v1/inventory/equipment
+ * Returns equipped items only
+ */
+router.get('/equipment', (req: Request, res: Response) => {
+    const equipped = InventoryService.getEquippedItems();
+    
+    res.json({
+        success: true,
+        data: {
+            equipped,
+            count: equipped.length,
+        },
+        meta: {
+            timestamp: new Date().toISOString(),
+            requestId: req.requestId
+        }
+    });
+});
+
+/**
+ * GET /api/v1/inventory/search
+ * Search items by name
+ * Query params:
+ *   - q: search query
+ */
+router.get('/search', (req: Request, res: Response) => {
+    const query = req.query.q as string;
+    
+    if (!query || query.length < 2) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'INVALID_QUERY',
+                message: 'Search query must be at least 2 characters'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    const results = InventoryService.searchItems(query);
+    
+    res.json({
+        success: true,
+        data: {
+            query,
+            results,
+            count: results.length,
         },
         meta: {
             timestamp: new Date().toISOString(),

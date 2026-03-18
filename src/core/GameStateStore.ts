@@ -378,6 +378,148 @@ class GameStateStoreClass {
         Logger.debug('GameStateStore', `Inventory updated: ${data.items?.length || 0} items, adena=${data.adena || this.inventory.adena}`);
     }
 
+    /**
+     * Добавляет или обновляет предмет в инвентаре (точечное обновление)
+     */
+    addOrUpdateInventoryItem(item: InventoryItem): void {
+        const items = this.inventory.items || [];
+        const existingIndex = items.findIndex(i => i.objectId === item.objectId);
+        
+        if (existingIndex >= 0) {
+            // Обновляем существующий предмет
+            items[existingIndex] = item;
+            Logger.debug('GameStateStore', `Updated item: ${item.name} (objectId=${item.objectId})`);
+        } else {
+            // Добавляем новый предмет
+            items.push(item);
+            Logger.debug('GameStateStore', `Added item: ${item.name} (objectId=${item.objectId})`);
+        }
+        
+        this.inventory.items = items;
+        
+        // Эмитим событие изменения инвентаря
+        EventBus.emitEvent({
+            type: 'inventory.changed',
+            channel: 'character',
+            data: {
+                action: existingIndex >= 0 ? 'updated' : 'added',
+                item: {
+                    objectId: item.objectId,
+                    itemId: item.itemId,
+                    name: item.name,
+                    count: item.count,
+                    equipped: item.equipped,
+                    enchant: item.enchant,
+                    slot: item.slot,
+                }
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    /**
+     * Удаляет предмет из инвентаря по objectId (точечное удаление)
+     */
+    removeInventoryItem(objectId: number): InventoryItem | null {
+        const items = this.inventory.items || [];
+        const index = items.findIndex(i => i.objectId === objectId);
+        
+        if (index >= 0) {
+            const removedItem = items[index];
+            items.splice(index, 1);
+            this.inventory.items = items;
+            
+            Logger.debug('GameStateStore', `Removed item: ${removedItem.name} (objectId=${objectId})`);
+            
+            // Эмитим событие удаления
+            EventBus.emitEvent({
+                type: 'inventory.changed',
+                channel: 'character',
+                data: {
+                    action: 'removed',
+                    objectId: objectId,
+                    itemId: removedItem.itemId,
+                    name: removedItem.name,
+                },
+                timestamp: new Date().toISOString()
+            });
+            
+            return removedItem;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Получает предмет по objectId
+     */
+    getInventoryItemByObjectId(objectId: number): InventoryItem | undefined {
+        return (this.inventory.items || []).find(i => i.objectId === objectId);
+    }
+
+    /**
+     * Получает предметы по itemId
+     */
+    getInventoryItemsByItemId(itemId: number): InventoryItem[] {
+        return (this.inventory.items || []).filter(i => i.itemId === itemId);
+    }
+
+    /**
+     * Получает экипированные предметы
+     */
+    getEquippedItems(): InventoryItem[] {
+        return (this.inventory.items || []).filter(i => i.equipped);
+    }
+
+    /**
+     * Получает предмет в определённом слоте экипировки
+     */
+    getEquippedItemBySlot(slot: number): InventoryItem | undefined {
+        return (this.inventory.items || []).find(i => i.equipped && i.slot === slot);
+    }
+
+    /**
+     * Обновляет только количество адены
+     */
+    updateAdena(amount: number): void {
+        const oldAdena = this.inventory.adena || 0;
+        this.inventory.adena = amount;
+        
+        // Эмитим событие изменения адены
+        EventBus.emitEvent({
+            type: 'inventory.adena_changed',
+            channel: 'character',
+            data: {
+                oldAmount: oldAdena,
+                newAmount: amount,
+                delta: amount - oldAdena,
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    /**
+     * Полностью очищает инвентарь и эмитит событие
+     * Вызывается при отключении от игры
+     */
+    clearInventory(): void {
+        this.inventory = { adena: 0, weight: { current: 0, max: 0 }, items: [] };
+        
+        // Эмитим событие очистки инвентаря для дашборда
+        EventBus.emitEvent({
+            type: 'inventory.cleared',
+            channel: 'character',
+            data: {
+                items: [],
+                adena: 0,
+                reason: 'disconnected'
+            },
+            timestamp: new Date().toISOString()
+        });
+        
+        Logger.debug('GameStateStore', 'Inventory cleared');
+    }
+
     // Combat methods
     getCombat(): CombatState {
         return { ...this.combat };
@@ -435,6 +577,30 @@ class GameStateStoreClass {
         return this.character.skills || [];
     }
 
+    /**
+     * Очищает список скиллов и эмитит событие
+     * Вызывается при отключении от игры
+     */
+    clearSkills(): void {
+        this.character.skills = [];
+        
+        // Эмитим событие очистки скиллов для дашборда
+        EventBus.emitEvent({
+            type: 'character.skills_cleared',
+            channel: 'character',
+            data: {
+                skills: [],
+                totalCount: 0,
+                activeCount: 0,
+                passiveCount: 0,
+                reason: 'disconnected'
+            },
+            timestamp: new Date().toISOString()
+        });
+        
+        Logger.debug('GameStateStore', 'Skills cleared due to disconnect');
+    }
+
     // Connection methods
     getConnection(): Partial<ConnectionState> {
         return {
@@ -463,6 +629,20 @@ class GameStateStoreClass {
         this.party = { inParty: false, isLeader: false, members: [] };
         this.connection = { phase: 'DISCONNECTED' };
         this.startTime = Date.now();
+        
+        // Эмитим событие очистки скиллов
+        EventBus.emitEvent({
+            type: 'character.skills_cleared',
+            channel: 'character',
+            data: {
+                skills: [],
+                totalCount: 0,
+                activeCount: 0,
+                passiveCount: 0,
+                reason: 'reset'
+            },
+            timestamp: new Date().toISOString()
+        });
     }
 }
 

@@ -168,7 +168,7 @@ export class WsServer {
     }
 
     private handleSubscribe(client: WsClient, channels: EventChannel[]): void {
-        const validChannels: EventChannel[] = ['system', 'character', 'combat', 'chat', 'world', 'movement', 'party'];
+        const validChannels: EventChannel[] = ['system', 'character', 'combat', 'chat', 'world', 'movement', 'party', 'inventory'];
         
         for (const channel of channels) {
             if (validChannels.includes(channel)) {

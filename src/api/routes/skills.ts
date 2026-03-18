@@ -9,9 +9,31 @@ const router = Router();
 /**
  * GET /api/v1/skills
  * Returns list of character skills with names from database.
+ * Returns empty array when not connected to game server.
  */
 router.get('/', (req: Request, res: Response) => {
+    const connection = GameStateStore.getConnection();
     const character = GameStateStore.getCharacter();
+    
+    // Return empty skills when not in game
+    if (connection.phase !== 'IN_GAME' || !character.objectId) {
+        res.json({
+            success: true,
+            data: {
+                skills: [],
+                totalCount: 0,
+                activeCount: 0,
+                passiveCount: 0,
+                inGame: false
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+    
     const skills = character.skills || [];
 
     // Transform skills to ensure consistent format with names
@@ -35,7 +57,8 @@ router.get('/', (req: Request, res: Response) => {
             skills: formattedSkills,
             totalCount: formattedSkills.length,
             activeCount: formattedSkills.filter(s => !s.isPassive).length,
-            passiveCount: formattedSkills.filter(s => s.isPassive).length
+            passiveCount: formattedSkills.filter(s => s.isPassive).length,
+            inGame: true
         },
         meta: {
             timestamp: new Date().toISOString(),

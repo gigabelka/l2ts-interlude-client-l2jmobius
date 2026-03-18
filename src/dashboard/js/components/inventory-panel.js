@@ -41,6 +41,41 @@ class InventoryPanel {
         if (inventoryTab) {
             observer.observe(inventoryTab, { attributes: true });
         }
+        
+        // Setup WebSocket listeners for real-time updates
+        this.setupWebSocketListeners();
+    }
+
+    /**
+     * Setup WebSocket event listeners for real-time updates
+     */
+    setupWebSocketListeners() {
+        // Wait for wsClient to be available
+        if (typeof wsClient === 'undefined') {
+            console.warn('[InventoryPanel] wsClient not available yet, retrying in 100ms...');
+            setTimeout(() => this.setupWebSocketListeners(), 100);
+            return;
+        }
+
+        console.log('[InventoryPanel] Setting up WebSocket listeners');
+        
+        // Inventory updated event
+        wsClient.addEventListener('inventory.changed', (e) => {
+            console.log('[InventoryPanel] Inventory changed event:', e.detail);
+            this.refresh();
+        });
+
+        // Inventory cleared event - when disconnected from game
+        wsClient.addEventListener('inventory.cleared', (e) => {
+            console.log('[InventoryPanel] Inventory cleared event:', e.detail);
+            this.clear();
+        });
+
+        // System disconnected - clear inventory
+        wsClient.addEventListener('system.disconnected', () => {
+            console.log('[InventoryPanel] System disconnected, clearing inventory');
+            this.clear();
+        });
     }
 
     /**
@@ -48,12 +83,6 @@ class InventoryPanel {
      */
     async refresh() {
         if (this.isLoading) return;
-        
-        // Check if we're in game
-        if (typeof window.dashboard === 'undefined' || !window.dashboard.isInGame) {
-            this.showEmpty('Not connected to game');
-            return;
-        }
         
         this.isLoading = true;
         
@@ -69,9 +98,19 @@ class InventoryPanel {
             // Load inventory
             const response = await apiClient.getInventory();
             
-            if (response && response.data) {
-                this.items = response.data.items || [];
-                this.adena = response.data.adena || 0;
+            // Check if response has data property (new API format) or is direct data (old format)
+            const data = response.data || response;
+            
+            // If not in game, clear the display
+            if (response.inGame === false || (data && data.inGame === false)) {
+                console.log('[InventoryPanel] Not in game, clearing inventory');
+                this.clear();
+                return;
+            }
+            
+            if (data && data.items) {
+                this.items = data.items || [];
+                this.adena = data.adena || 0;
                 
                 // Filter items
                 let displayItems = this.items;
@@ -303,6 +342,17 @@ class InventoryPanel {
         } catch (error) {
             console.error('[InventoryPanel] Drop item failed:', error);
         }
+    }
+
+    /**
+     * Clear inventory display
+     */
+    clear() {
+        this.items = [];
+        this.equipment.clear();
+        this.adena = 0;
+        this.showEmpty('Not connected to game');
+        this.updateAdena();
     }
 }
 

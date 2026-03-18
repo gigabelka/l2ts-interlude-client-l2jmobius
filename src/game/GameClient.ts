@@ -18,6 +18,7 @@ import { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
 import { GameStateStore } from '../core/GameStateStore';
 import { EventBus } from '../core/EventBus';
 import { GameCommandManager } from './GameCommandManager';
+import { InventoryService } from '../services/InventoryService';
 
 export class GameClient extends Connection {
     private state: GameState = GameState.IDLE;
@@ -34,6 +35,9 @@ export class GameClient extends Connection {
         Logger.logState(this.state, GameState.CONNECTING);
         Logger.info('GameClient', `Connecting to Game Server: ${this.session.gameServerIp}:${this.session.gameServerPort}`);
         this.state = GameState.CONNECTING;
+        
+        // Initialize services
+        InventoryService.initialize();
         
         // Register with command manager
         GameCommandManager.setGameClient(this);
@@ -65,6 +69,10 @@ export class GameClient extends Connection {
         
         // Unregister from command manager
         GameCommandManager.setGameClient(null);
+        
+        // Clear character-specific state (skills, inventory, etc.)
+        GameStateStore.clearSkills();
+        GameStateStore.clearInventory();
         
         GameStateStore.updateConnection({
             phase: 'DISCONNECTED',
