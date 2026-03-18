@@ -111,7 +111,32 @@ src/
 │       ├── connection.ts
 │       └── social.ts
 │
-├── core/                    # Core Architecture
+├── config/di/               # Dependency Injection (Clean Architecture)
+│   ├── Container.ts         # Lightweight IoC container
+│   ├── composition.ts       # Composition root
+│   └── tokens.ts            # DI tokens
+│
+├── domain/                  # Domain Layer (Clean Architecture)
+│   ├── entities/            # Character, Npc, Item, InventoryItem, WorldItem
+│   ├── value-objects/       # Position, Vitals, ObjectId, BaseStats, etc.
+│   ├── events/              # 30+ Domain Events
+│   └── repositories/        # Repository interfaces
+│
+├── application/             # Application Layer (Clean Architecture)
+│   └── ports/               # IEventBus, IPacketProcessor, IStateMachine, etc.
+│
+├── infrastructure/          # Infrastructure Layer (Clean Architecture)
+│   ├── persistence/         # InMemory repositories
+│   ├── event-bus/           # SimpleEventBus
+│   ├── protocol/game/       # Game packet processing (Factory + Strategy)
+│   │   ├── packets/         # DTOs (UserInfoPacket, NpcInfoPacket, etc.)
+│   │   ├── handlers/        # Strategy handlers
+│   │   ├── GameIncomingPacketFactory.ts
+│   │   ├── GamePacketProcessor.ts
+│   │   └── PacketRegistry.ts
+│   └── integration/         # Legacy adapters (GameClientAdapter)
+│
+├── core/                    # Core Architecture (Legacy)
 │   ├── EventBus.ts          # Typed EventEmitter for real-time events
 │   ├── GameStateStore.ts    # Central state store (singleton)
 │   └── index.ts             # Core exports
@@ -156,7 +181,12 @@ tests/                       # Test Suite
 │   └── mockServer.ts        # Mock L2 server for tests
 ├── integration/
 │   ├── api/                 # API integration tests
-│   └── packets/             # Packet parsing tests
+│   ├── packets/             # Packet parsing tests (legacy)
+│   └── GameClientAdapter.test.ts  # New architecture integration
+├── new-architecture/        # Clean Architecture tests
+│   ├── domain/              # Entity, Value Object tests
+│   ├── infrastructure/      # Repository, EventBus tests
+│   └── packets/             # Packet encoding, handler tests
 
 scripts/                     # Build Scripts
 ├── bump-version.js          # Auto-increment version
@@ -230,6 +260,90 @@ L2 protocol: каждый пакет начинается с `uint16LE` длин
 // Packet format types used in code:
 // C = uint8, H = uint16, D = int32, Q = int64, F = double
 // S = UTF-16LE null-terminated string
+```
+
+---
+
+## Clean Architecture (New)
+
+Проект постепенно переходит на Clean Architecture с использованием Domain-Driven Design паттернов.
+
+### Feature Flag
+
+Новая архитектура управляется через переменную окружения:
+
+```bash
+# Включить новую архитектуру
+USE_NEW_ARCHITECTURE=true npm start
+
+# Обычный запуск (legacy)
+npm start
+```
+
+### Структура новой архитектуры
+
+```
+src/
+├── domain/                    # Domain Layer (Entities, Value Objects, Events)
+│   ├── entities/              # Character, Npc, Item (событийное поведение)
+│   ├── value-objects/         # Position, Vitals, ObjectId (immutable)
+│   ├── events/                # Domain Events (30+ типов)
+│   └── repositories/          # Repository interfaces (ICharacterRepository и т.д.)
+│
+├── application/               # Application Layer (Use Cases)
+│   ├── ports/                 # Interfaces (IEventBus, IPacketProcessor, etc.)
+│   └── services/              # Application services (TODO)
+│
+├── infrastructure/            # Infrastructure Layer
+│   ├── persistence/           # In-memory repositories
+│   ├── event-bus/             # SimpleEventBus implementation
+│   ├── protocol/game/         # Game packet processing (Factory + Strategy)
+│   │   ├── packets/           # DTOs (UserInfoPacket, NpcInfoPacket, etc.)
+│   │   ├── handlers/          # Strategy handlers (UserInfoHandler, etc.)
+│   │   ├── GameIncomingPacketFactory.ts
+│   │   ├── GamePacketProcessor.ts
+│   │   └── PacketRegistry.ts  # Centralized packet registration
+│   └── integration/           # Adapters for legacy integration
+│       └── GameClientAdapter.ts
+│
+└── config/di/                 # Dependency Injection
+    ├── Container.ts           # Lightweight IoC container
+    └── composition.ts         # Composition root
+```
+
+### Реализованные паттерны
+
+| Pattern | Implementation | Description |
+|---------|---------------|-------------|
+| **Strategy** | `GamePacketProcessor` + handlers | Обработка пакетов через стратегии |
+| **Factory** | `GameIncomingPacketFactory` | Создание пакетов по opcode |
+| **Repository** | `InMemoryCharacterRepository` | Абстракция доступа к данным |
+| **Adapter** | `GameClientAdapter` | Интеграция с legacy кодом |
+| **State Machine** | `createGameStateMachine()` | Управление состояниями игры |
+| **Event Sourcing** | `DomainEvent` + `uncommittedEvents` | Отслеживание изменений |
+
+### Миграция пакетов
+
+Добавление нового пакета в новую архитектуру:
+
+1. Создать DTO в `src/infrastructure/protocol/game/packets/NewPacket.ts`
+2. Создать handler в `src/infrastructure/protocol/game/handlers/NewHandler.ts`
+3. Добавить регистрацию в `src/infrastructure/protocol/game/PacketRegistry.ts`
+4. Handler автоматически регистрируется в DI контейнере
+
+Пример:
+```typescript
+// PacketRegistry.ts
+const PACKET_REGISTRY: PacketConfig[] = [
+    // ... existing packets
+    {
+        opcode: 0xXX,
+        packetClass: NewPacket,
+        handlerClass: NewHandler,
+        repositories: ['character'], // зависимости
+        description: 'New packet description',
+    },
+];
 ```
 
 ---
@@ -514,6 +628,15 @@ AUTO_CONNECT_GAME=false npm start
 
 ## Version History
 
+- **0.3.0** — Clean Architecture implementation:
+  - Domain Layer with entities, value objects, domain events
+  - Application Layer with ports (interfaces)
+  - Infrastructure Layer with repositories, event bus, packet processor
+  - DI Container with IoC
+  - GameClientAdapter для интеграции с legacy
+  - Feature flag `USE_NEW_ARCHITECTURE`
+  - 11 migrated packets (UserInfo, NpcInfo, CharInfo, ItemList, etc.)
+  - 200+ tests passing
 - **0.2.1** — Added Dashboard
 - **0.1.39** — Fixed disconnect/reconnect routes, added target endpoints
 - **0.1.38** — Added REST + WebSocket API, GameStateStore, EventBus

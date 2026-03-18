@@ -1,9 +1,15 @@
 import { Router, type Request, type Response } from 'express';
-import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
 import { combatRateLimitMiddleware } from '../middleware/rateLimiter';
+import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { DI_TOKENS } from '../../config/di/Container';
+import type { ICharacterRepository } from '../../domain/repositories';
 
 const router = Router();
+
+// Repository accessors
+const container = architectureBridge.getContainer();
+const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
 
 /**
  * POST /api/v1/combat/attack
@@ -12,10 +18,10 @@ const router = Router();
  */
 router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) => {
     const { objectId, shiftClick } = req.body;
-    const combat = GameStateStore.getCombat();
+    const char = getCharRepo().get();
+    const targetId = objectId || char?.targetId;
 
     // Use provided objectId or current target
-    const targetId = objectId || combat.targetObjectId;
 
     if (!targetId) {
         res.status(400).json({
@@ -68,7 +74,10 @@ router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) 
  * Stop auto-attack.
  */
 router.post('/stop', combatRateLimitMiddleware, (req: Request, res: Response) => {
-    GameStateStore.setInCombat(false);
+    const char = getCharRepo().get();
+    if (char) {
+        char.setInCombat(false);
+    }
 
     res.json({
         success: true,

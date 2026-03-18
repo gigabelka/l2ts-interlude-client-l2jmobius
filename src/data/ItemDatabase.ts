@@ -10,11 +10,8 @@ import type { Item } from './types';
  */
 export class ItemDatabase {
     private static instance: ItemDatabase;
-    private itemMap: Map<number, Item>;
 
-    private constructor() {
-        this.itemMap = itemById;
-    }
+    private constructor() {}
 
     public static getInstance(): ItemDatabase {
         if (!ItemDatabase.instance) {

@@ -1,57 +1,73 @@
+/**
+ * @fileoverview GameClientNew - Рефакторинг GameClient с новой архитектурой
+ * Использует Clean Architecture: repositories, EventBus, PacketProcessor
+ * @module game/GameClientNew
+ */
+
 import Connection from '../network/Connection';
 import { Logger } from '../logger/Logger';
-import { GamePacketHandler } from './GamePacketHandler';
 import { GameState } from './GameState';
 import type { SessionData } from '../login/types';
-import type { IncomingGamePacket } from './packets/incoming/IncomingGamePacket';
-import { CryptInitPacket } from './packets/incoming/CryptInitPacket';
-import { CharSelectedPacket } from './packets/incoming/CharSelectedPacket';
-import { UserInfoPacket } from './packets/incoming/UserInfoPacket';
-import { NetPingRequestPacket } from './packets/incoming/NetPingRequestPacket';
+import { GameCrypt } from './GameCrypt';
+import { CONFIG } from '../config';
+
+// New Architecture imports
+import type { IEventBus, IPacketProcessor } from '../application/ports';
+import type { ICharacterRepository, IWorldRepository, IInventoryRepository } from '../domain/repositories';
+
+import { CharacterEnteredGameEvent, ConnectionPhaseChangedEvent } from '../domain/events';
+import { IConnectionRepository, ConnectionPhase } from '../domain';
+
+// Packets
 import { ProtocolVersion } from './packets/outgoing/ProtocolVersion';
 import { CharacterSelected } from './packets/outgoing/CharacterSelected';
 import { AuthRequest } from './packets/outgoing/AuthRequest';
 import { RequestInventoryOpen } from './packets/outgoing/RequestInventoryOpen';
-import { GameCrypt } from './GameCrypt';
-import { CONFIG } from '../config';
 import { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
-import { GameStateStore } from '../core/GameStateStore';
-import { EventBus } from '../core/EventBus';
-import { GameCommandManager } from './GameCommandManager';
-import { InventoryService } from '../services/InventoryService';
 
-export class GameClient extends Connection {
+// Services
+import { GameCommandManager } from './GameCommandManager';
+import type { IGameClient } from './IGameClient';
+
+/**
+ * Dependencies for GameClient
+ */
+export interface GameClientDependencies {
+    eventBus: IEventBus;
+    packetProcessor: IPacketProcessor;
+    characterRepo: ICharacterRepository;
+    worldRepo: IWorldRepository;
+    inventoryRepo: IInventoryRepository;
+    connectionRepo: IConnectionRepository;
+}
+
+/**
+ * Game Server connection client with Clean Architecture
+ */
+export class GameClientNew extends Connection implements IGameClient {
     private state: GameState = GameState.IDLE;
     private crypt: GameCrypt = new GameCrypt();
-    private handler: GamePacketHandler = new GamePacketHandler();
+    private deps: GameClientDependencies;
 
     constructor(
         private session: SessionData,
+        deps: GameClientDependencies
     ) {
         super();
+        this.deps = deps;
     }
 
     start(): void {
         Logger.logState(this.state, GameState.CONNECTING);
         Logger.info('GameClient', `Connecting to Game Server: ${this.session.gameServerIp}:${this.session.gameServerPort}`);
         this.state = GameState.CONNECTING;
-        
+
         // Initialize services
-        InventoryService.initialize();
-        
-        // Register with command manager
         GameCommandManager.setGameClient(this);
-        
-        // Update connection state
-        GameStateStore.updateConnection({
-            phase: 'GAME_CONNECTING',
-            gameServer: { 
-                connected: false, 
-                host: this.session.gameServerIp, 
-                port: this.session.gameServerPort 
-            }
-        });
-        
+
+        // Update connection state via repository
+        this.publishConnectionState(ConnectionPhase.ENTERING_GAME);
+
         this.connect(this.session.gameServerIp, this.session.gameServerPort);
     }
 
@@ -59,106 +75,119 @@ export class GameClient extends Connection {
         Logger.info('GameClient', 'Connected to Game Server');
         Logger.logState(this.state, GameState.WAIT_CRYPT_INIT);
         this.state = GameState.WAIT_CRYPT_INIT;
-        
+
         const pv = new ProtocolVersion();
         this.sendPacketRawBuffer(pv.encode());
     }
 
     protected onClose(): void {
         Logger.info('GameClient', '*** GAME SERVER CONNECTION CLOSED ***');
-        
-        // Unregister from command manager
+
         GameCommandManager.setGameClient(null);
-        
-        // Clear character-specific state (skills, inventory, etc.)
-        GameStateStore.clearSkills();
-        GameStateStore.clearInventory();
-        
-        GameStateStore.updateConnection({
-            phase: 'DISCONNECTED',
-            gameServer: { connected: false, host: '', port: 0 }
-        });
-        
-        EventBus.emitEvent({
-            type: 'system.disconnected',
-            channel: 'system',
-            data: {
-                reason: 'Connection closed',
-                phase: 'DISCONNECTED',
-                willReconnect: false
-            },
-            timestamp: new Date().toISOString()
-        });
+
+        // Clear repositories
+        this.deps.characterRepo.reset();
+        this.deps.worldRepo.reset();
+        this.deps.inventoryRepo.clear();
+
+        this.publishConnectionState(ConnectionPhase.DISCONNECTED);
+        this.publishDisconnectedEvent();
     }
 
     protected onError(err: Error): void {
         Logger.error('GameClient', `*** GAME SERVER ERROR: ${err.message} ***`);
         this.state = GameState.ERROR;
-        
-        GameStateStore.updateConnection({
-            phase: 'ERROR'
-        });
-        
-        EventBus.emitEvent({
-            type: 'system.error',
-            channel: 'system',
-            data: {
-                code: 'GAME_CONNECTION_ERROR',
-                message: err.message
-            },
-            timestamp: new Date().toISOString()
-        });
+        this.publishConnectionState(ConnectionPhase.ERROR);
+        this.deps.connectionRepo.update({ error: err.message });
+        this.publishErrorEvent(err.message);
     }
 
     protected onRawPacket(fullPacket: Buffer): void {
         const encryptedBody = fullPacket.subarray(2);
         const body = this.crypt.decrypt(encryptedBody);
-        
-        const opcode = body[0];
+        const opcode = body[0]!;
+
         Logger.logPacket('RECV', opcode, fullPacket);
         Logger.debug('GameClient', `[state=${this.state}] opcode=0x${opcode.toString(16).padStart(2, '0')} bodyLen=${body.length}`);
-
         Logger.hexDump('RECV DECRYPTED', body, Math.min(body.length, 64));
 
-        // Emit raw packet event for WebSocket - ALL PACKETS go to dashboard
-        EventBus.emitEvent({
-            type: 'system.raw_packet',
-            channel: 'system',
-            data: {
-                opcode: opcode,
-                opcodeHex: `0x${opcode.toString(16).padStart(2, '0')}`,
-                length: body.length,
-                state: this.state
-            },
-            timestamp: new Date().toISOString()
-        });
+        // Publish raw packet event
+        this.publishRawPacketEvent(opcode, body.length);
 
-        const packet = this.handler.handle(opcode, body, this.state);
+        // Process packet with new architecture
+        const result = this.deps.packetProcessor.process(opcode, body, this.state);
 
-        if (packet !== null) {
-            Logger.debug('GameClient', `Handled packet opcode=0x${opcode.toString(16).padStart(2, '0')} in state=${this.state}`);
-            this.handlePacket(packet, opcode);
+        if (result.success) {
+            Logger.debug('GameClient', `Processed packet opcode=0x${opcode.toString(16).padStart(2, '0')} in state=${this.state}`);
+            this.handlePacket(result.packet, opcode);
         } else {
-            Logger.warn('GameClient', `Unknown opcode=0x${opcode.toString(16).padStart(2, '0')}, bodyLen=${body.length}`);
+            // Handle packets not processed by the new system (handshake packets)
+            this.handleHandshakePacket(opcode, body);
         }
     }
 
-    private handlePacket(packet: IncomingGamePacket, opcode: number): void {
+    private handlePacket(_packet: unknown, opcode: number): void {
+        // Post-processing for state transitions
+        switch (this.state) {
+            case GameState.WAIT_USER_INFO:
+                if (opcode === 0x04) {
+                    // UserInfo received - character is now in game
+                    const char = this.deps.characterRepo.get();
+                    if (char) {
+                        Logger.info('GameClient', `ENTERED GAME WORLD AS: ${char.name}`);
+                        Logger.logState(this.state, GameState.IN_GAME);
+                        this.state = GameState.IN_GAME;
+
+                        this.publishConnectionState(ConnectionPhase.IN_GAME);
+                        this.publishConnectedEvent(char.name);
+
+                        // Request inventory
+                        Logger.info('GameClient', 'Requesting inventory...');
+                        this.sendPacket(new RequestInventoryOpen());
+
+                        // Retry inventory request after 3 seconds
+                        setTimeout(() => {
+                            const state = this.deps.inventoryRepo.getState();
+                            if (state.items.length === 0) {
+                                Logger.info('GameClient', 'Inventory empty, retrying request...');
+                                this.sendPacket(new RequestInventoryOpen());
+                            }
+                        }, 3000);
+                    }
+                }
+                break;
+
+            case GameState.IN_GAME:
+                // Handle ping - moved to handleHandshakePacket where body is accessible
+                break;
+        }
+    }
+
+    private handleHandshakePacket(opcode: number, body: Buffer): void {
+        // Handle handshake packets that aren't in the new processor yet
         switch (this.state) {
             case GameState.WAIT_CRYPT_INIT: {
                 if (opcode !== 0x00 && opcode !== 0x2D) {
                     Logger.warn('GameClient', `Expected CryptInit, got 0x${opcode.toString(16)}`);
                     return;
                 }
-                const p = packet as CryptInitPacket;
-                if (p.result !== 1) {
-                    Logger.error('GameClient', `ProtocolVersion rejected by server! result=${p.result}`);
+
+                // Parse CryptInit (23 bytes for L2J_Mobius)
+                // Offset 1: result (1 = success)
+                // Offset 2-9: XOR key (8 bytes)
+                // Offset 10-13: encryption flag (0 = disabled)
+                const result = body[1];
+                if (result !== 1) {
+                    Logger.error('GameClient', `ProtocolVersion rejected by server! result=${result}`);
                     return;
                 }
 
+                // Get XOR key and encryption flag
+                const xorKeyData = body.subarray(2, 10);
+                const useEncryption = body.readUInt32LE(10) !== 0;
+
                 // Initialize crypto
-                this.crypt.initKey(p.xorKeyData, p.useEncryption);
-                Logger.info('GameCrypt', `XOR keys initialized. Encryption will be used: ${p.useEncryption}`);
+                this.crypt.initKey(xorKeyData, useEncryption);
 
                 Logger.info('GameClient', 'Sending AuthLogin (0x08)...');
                 this.sendPacket(new AuthRequest(this.session, CONFIG.Username));
@@ -170,132 +199,57 @@ export class GameClient extends Connection {
 
             case GameState.WAIT_CHAR_LIST: {
                 if (opcode === 0x04 || opcode === 0x13 || opcode === 0x2C) {
-                    const charInfo = packet as import('./packets/incoming/CharSelectInfoPacket').CharSelectInfoPacket;
-                    Logger.info('GameClient', `CharSelectInfo received: ${charInfo.charCount} character(s)`);
-                    
+                    // CharSelectInfo received
+                    const charCount = body.readUInt32LE(1);
+                    Logger.info('GameClient', `CharSelectInfo received: ${charCount} character(s)`);
+
                     // Select character
                     Logger.info('GameClient', `Sending CharacterSelect for slot ${CONFIG.CharSlotIndex}...`);
                     this.sendPacket(new CharacterSelected(CONFIG.CharSlotIndex));
-                    
+
                     Logger.logState(this.state, GameState.WAIT_CHAR_SELECTED);
                     this.state = GameState.WAIT_CHAR_SELECTED;
+                    this.publishConnectionState(ConnectionPhase.SELECTING_CHARACTER);
                 }
                 return;
             }
 
             case GameState.WAIT_CHAR_SELECTED: {
                 if (opcode === 0x15) {
+                    // CharSelected confirmation
                     Logger.info('GameClient', 'CharSelected confirmation received');
-                    this.handleCharSelected(packet as CharSelectedPacket);
-                    return;
+                    this.handleCharSelected();
                 }
                 return;
             }
 
-            case GameState.WAIT_USER_INFO: {
-                if (opcode === 0x04) {
-                    const p = packet as UserInfoPacket;
-                    Logger.info('GameClient', `ENTERED GAME WORLD AS: ${p.name}`);
-                    Logger.logState(this.state, GameState.IN_GAME);
-                    this.state = GameState.IN_GAME;
-                    
-                    // Update GameStateStore with character info
-                    GameStateStore.updateCharacter({
-                        objectId: p.objectId,
-                        name: p.name,
-                        level: p.level,
-                        position: { x: p.x, y: p.y, z: p.z }
-                    });
-                    
-                    GameStateStore.updateConnection({
-                        phase: 'IN_GAME',
-                        gameServer: { 
-                            connected: true, 
-                            host: this.session.gameServerIp, 
-                            port: this.session.gameServerPort 
-                        }
-                    });
-                    
-                    // Emit connected event
-                    EventBus.emitEvent({
-                        type: 'system.connected',
-                        channel: 'system',
-                        data: {
-                            phase: 'IN_GAME',
-                            characterName: p.name,
-                            serverId: CONFIG.ServerId
-                        },
-                        timestamp: new Date().toISOString()
-                    });
-                    
-                    // Emit position changed event
-                    EventBus.emitEvent({
-                        type: 'movement.position_changed',
-                        channel: 'movement',
-                        data: {
-                            objectId: p.objectId,
-                            position: { x: p.x, y: p.y, z: p.z },
-                            speed: 0,
-                            isRunning: false
-                        },
-                        timestamp: new Date().toISOString()
-                    });
-                    
-                    // Request inventory after entering world
-                    Logger.info('GameClient', 'Requesting inventory...');
-                    this.sendPacket(new RequestInventoryOpen());
-                    
-                    // Retry inventory request after 3 seconds if empty
-                    setTimeout(() => {
-                        const inv = GameStateStore.getInventory();
-                        if (!inv.items || inv.items.length === 0) {
-                            Logger.info('GameClient', 'Inventory empty, retrying request...');
-                            this.sendPacket(new RequestInventoryOpen());
-                        }
-                    }, 3000);
-                }
-                break;
-            }
-
-            case GameState.IN_GAME: {
-                // Handle ping
-                if (opcode === 0xD3) {
-                    const p = packet as NetPingRequestPacket;
-                    Logger.debug('GameClient', `pingId=${p.pingId} -> Pong`);
-                    this.sendPacketRawBuffer(Buffer.from([0xA8, p.pingId]));
-                }
-                
-                // All other packets are handled in their respective decode methods
-                // which emit events to EventBus -> WebSocket
-                break;
-            }
-
             default:
+                // Handle NetPingRequest (0xD3) in any state when in game
+                if (opcode === 0xD3 && this.state === GameState.IN_GAME) {
+                    // NetPingRequest - respond with pong
+                    // Packet structure: opcode (1) + pingId (4 bytes, int32LE)
+                    const pingId = body.readInt32LE(1) || 0;
+                    Logger.debug('GameClient', `pingId=${pingId} -> Pong`);
+                    this.sendPacketRawBuffer(Buffer.from([0xA8, pingId]));
+                    return;
+                }
                 Logger.warn('GameClient', `Packet in state ${this.state}, opcode=0x${opcode.toString(16)}`);
         }
     }
 
-    private handleCharSelected(p: CharSelectedPacket): void {
-        Logger.info('GameClient', `CharSelected: ${p.charName}  id=${p.charId}`);
+    private handleCharSelected(): void {
         Logger.logState(this.state, GameState.WAIT_USER_INFO);
         this.state = GameState.WAIT_USER_INFO;
 
-        // Send EnterWorld sequence (three packets from Wireshark capture)
-        // Part 1: 0x9D (empty)
+        // Send EnterWorld sequence
         this.sendPacketRawBuffer(Buffer.from([0x9D]));
-
-        // Part 2: 0xD0 0x08 0x00
         this.sendPacketRawBuffer(Buffer.from([0xD0, 0x08, 0x00]));
 
-        // Part 3: EnterWorld (0x03) with 104 bytes padding
         const enterWorldPayload = Buffer.alloc(105, 0);
         enterWorldPayload[0] = 0x03;
         this.sendPacketRawBuffer(enterWorldPayload);
     }
 
-    /**
-     * Send a game packet (public API for GameCommandManager)
-     */
     sendPacket(packet: OutgoingGamePacket): void {
         const body = packet.encode();
         const encrypted = this.crypt.encrypt(body);
@@ -309,5 +263,71 @@ export class GameClient extends Connection {
         out.writeUInt16LE(totalLen, 0);
         buffer.copy(out, 2);
         this.sendRaw(out);
+    }
+
+    // ============================================================================
+    // Event Publishing Helpers
+    // ============================================================================
+
+    private publishConnectionState(phase: ConnectionPhase): void {
+        this.deps.connectionRepo.setPhase(phase);
+        this.deps.eventBus.publish(new ConnectionPhaseChangedEvent({ phase }));
+        if (phase === ConnectionPhase.ENTERING_GAME) {
+            this.deps.connectionRepo.update({ host: this.session.gameServerIp, port: this.session.gameServerPort });
+        }
+    }
+
+    private publishRawPacketEvent(opcode: number, length: number): void {
+        this.deps.eventBus.publish({
+            type: 'system.raw_packet',
+            channel: 'system',
+            payload: {
+                opcode,
+                opcodeHex: `0x${opcode.toString(16).padStart(2, '0')}`,
+                length,
+                state: this.state,
+            },
+            timestamp: new Date(),
+        });
+    }
+
+    private publishConnectedEvent(_characterName: string): void {
+        const char = this.deps.characterRepo.get();
+        if (!char) return;
+
+        this.deps.eventBus.publish(new CharacterEnteredGameEvent({
+            objectId: char.id,
+            name: char.name,
+            level: char.level,
+            classId: char.classId,
+            raceId: char.raceId,
+            sex: char.sex,
+            position: char.position,
+        }));
+    }
+
+    private publishDisconnectedEvent(): void {
+        this.deps.eventBus.publish({
+            type: 'system.disconnected',
+            channel: 'system',
+            payload: {
+                reason: 'Connection closed',
+                phase: 'DISCONNECTED',
+                willReconnect: false,
+            },
+            timestamp: new Date(),
+        });
+    }
+
+    private publishErrorEvent(message: string): void {
+        this.deps.eventBus.publish({
+            type: 'system.error',
+            channel: 'system',
+            payload: {
+                code: 'GAME_CONNECTION_ERROR',
+                message,
+            },
+            timestamp: new Date(),
+        });
     }
 }

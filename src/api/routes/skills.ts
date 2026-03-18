@@ -1,10 +1,16 @@
 import { Router, type Request, type Response } from 'express';
-import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
 import { SkillDatabase } from '../../data/SkillDatabase';
 import { Logger } from '../../logger/Logger';
+import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { DI_TOKENS } from '../../config/di/Container';
+import type { ICharacterRepository } from '../../domain/repositories';
 
 const router = Router();
+
+// Repository accessors
+const container = architectureBridge.getContainer();
+const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
 
 /**
  * GET /api/v1/skills
@@ -12,11 +18,10 @@ const router = Router();
  * Returns empty array when not connected to game server.
  */
 router.get('/', (req: Request, res: Response) => {
-    const connection = GameStateStore.getConnection();
-    const character = GameStateStore.getCharacter();
+    const character = getCharRepo().get();
     
     // Return empty skills when not in game
-    if (connection.phase !== 'IN_GAME' || !character.objectId) {
+    if (!character || !character.id) {
         res.json({
             success: true,
             data: {
@@ -34,7 +39,7 @@ router.get('/', (req: Request, res: Response) => {
         return;
     }
     
-    const skills = character.skills || [];
+    const skills = Array.from(character.skills) || [];
 
     // Transform skills to ensure consistent format with names
     const formattedSkills = skills.map(skill => {
@@ -43,9 +48,9 @@ router.get('/', (req: Request, res: Response) => {
         const skillType = SkillDatabase.getSkillType(skill.id || 0);
         
         return {
-            skillId: skill.id || skill.skillId,
+            skillId: skill.id,
             level: skill.level,
-            name: skillName || `Skill #${skill.id || skill.skillId}`,
+            name: skillName || `Skill #${skill.id}`,
             isPassive: skill.isPassive,
             type: skillType || (skill.isPassive ? 'PASSIVE' : 'ACTIVE')
         };
@@ -90,8 +95,8 @@ router.post('/use', (req: Request, res: Response) => {
         return;
     }
 
-    const character = GameStateStore.getCharacter();
-    const skills = character.skills || [];
+    const character = getCharRepo().get();
+    const skills = character ? Array.from(character.skills) : [];
     
     // Validate skill exists in character's skill list
     const skill = skills.find((s: { id?: number; skillId?: number }) => s.id === skillId || s.skillId === skillId);
@@ -152,7 +157,7 @@ router.post('/use', (req: Request, res: Response) => {
  * Returns skill shortcuts (hotkeys).
  */
 router.get('/shortcuts', (req: Request, res: Response) => {
-    // TODO: Implement shortcuts storage in GameStateStore
+    // TODO: Implement shortcuts storage in new architecture
     // For now, return empty array
     res.json({
         success: true,

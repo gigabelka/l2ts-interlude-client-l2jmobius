@@ -1,10 +1,18 @@
 import { Router, type Request, type Response } from 'express';
-import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
 import { moveRateLimitMiddleware } from '../middleware/rateLimiter';
 import { Logger } from '../../logger/Logger';
+import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { DI_TOKENS } from '../../config/di/Container';
+import type { ICharacterRepository, IWorldRepository } from '../../domain/repositories';
+
 
 const router = Router();
+
+// Repository accessors
+const container = architectureBridge.getContainer();
+const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+const getWorldRepo = () => container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
 
 /**
  * POST /api/v1/move/to
@@ -13,9 +21,9 @@ const router = Router();
  */
 router.post('/to', moveRateLimitMiddleware, (req: Request, res: Response) => {
     const { x, y, z, validateRange } = req.body;
-    const character = GameStateStore.getCharacter();
+    const character = getCharRepo().get();
 
-    if (!character.position) {
+    if (!character?.position) {
         res.status(503).json({
             success: false,
             error: {
@@ -32,9 +40,9 @@ router.post('/to', moveRateLimitMiddleware, (req: Request, res: Response) => {
 
     // Validate range if requested
     if (validateRange) {
-        const dx = x - character.position.x;
-        const dy = y - character.position.y;
-        const dz = z - character.position.z;
+        const dx = x - character!.position.x;
+        const dy = y - character!.position.y;
+        const dz = z - character!.position.z;
         const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         if (distance > 50000) {
@@ -62,7 +70,7 @@ router.post('/to', moveRateLimitMiddleware, (req: Request, res: Response) => {
             data: {
                 message: 'Move command sent',
                 destination: { x, y, z },
-                from: character.position
+                from: character!.position
             },
             meta: {
                 timestamp: new Date().toISOString(),
@@ -89,9 +97,9 @@ router.post('/to', moveRateLimitMiddleware, (req: Request, res: Response) => {
  * Stop movement.
  */
 router.post('/stop', moveRateLimitMiddleware, (req: Request, res: Response) => {
-    const character = GameStateStore.getCharacter();
+    const character = getCharRepo().get();
 
-    if (!character.position) {
+    if (!character?.position) {
         res.status(503).json({
             success: false,
             error: {
@@ -110,12 +118,12 @@ router.post('/stop', moveRateLimitMiddleware, (req: Request, res: Response) => {
     const success = GameCommandManager.stopMove();
 
     if (success) {
-        Logger.info('MovementRoute', `Stop movement command sent at ${character.position.x},${character.position.y},${character.position.z}`);
+        Logger.info('MovementRoute', `Stop movement command sent at ${character!.position.x},${character!.position.y},${character!.position.z}`);
         res.json({
             success: true,
             data: {
                 message: 'Stop movement command sent',
-                position: character.position
+                position: character!.position
             },
             meta: {
                 timestamp: new Date().toISOString(),
@@ -142,12 +150,11 @@ router.post('/stop', moveRateLimitMiddleware, (req: Request, res: Response) => {
  * Get current movement status.
  */
 router.get('/status', (req: Request, res: Response) => {
-    const character = GameStateStore.getCharacter();
-    const connection = GameStateStore.getConnection();
+    const character = getCharRepo().get();
     
-    // Determine if character is moving based on connection phase and position availability
-    const isInGame = connection.phase === 'IN_GAME';
-    const hasPosition = character.position !== undefined && character.position !== null;
+    // Determine if character is in game based on character existence
+    const isInGame = character !== null;
+    const hasPosition = character?.position !== undefined && character?.position !== null;
     
     // TODO: In future, track actual movement state when we have MoveToLocation packets
     const isMoving = false;
@@ -158,8 +165,8 @@ router.get('/status', (req: Request, res: Response) => {
             isMoving,
             isInGame,
             hasPosition,
-            position: character.position || null,
-            speed: character.stats?.speed || 0
+            position: character?.position?.toJSON() || null,
+            speed: character?.combatStats?.speed || 0
         },
         meta: {
             timestamp: new Date().toISOString(),
@@ -191,11 +198,11 @@ router.post('/follow', moveRateLimitMiddleware, (req: Request, res: Response) =>
         return;
     }
 
-    const world = GameStateStore.getWorld();
+    const worldRepo = getWorldRepo();
     
     // Validate target exists
-    const npcTarget = world.npcs.get(objectId);
-    const playerTarget = world.players.get(objectId);
+    const npcTarget = worldRepo.getNpc(objectId);
+    const playerTarget = undefined; // Player repository not yet implemented
     const target = npcTarget || playerTarget;
 
     if (!target) {

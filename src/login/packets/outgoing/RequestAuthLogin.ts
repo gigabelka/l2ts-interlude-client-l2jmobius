@@ -16,7 +16,7 @@ export class RequestAuthLogin implements OutgoingLoginPacket {
   private readonly ggAuthResponse: number;
 
   constructor(
-    private readonly login: string,
+    login: string,
     password: string,
     rsaPublicKeyModulus: Buffer,
     ggAuthResponse: number

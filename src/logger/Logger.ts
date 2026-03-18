@@ -65,7 +65,7 @@ function formatHexDump(buf: Buffer, label: string, maxBytes: number): void {
 
         let hexParts: string[] = [];
         for (let j = 0; j < chunk.length; j++) {
-            hexParts.push(chunk[j].toString(16).padStart(2, '0').toUpperCase());
+            hexParts.push(chunk[j]!.toString(16).padStart(2, '0').toUpperCase());
         }
 
         const group1 = hexParts.slice(0, 8);
@@ -80,7 +80,7 @@ function formatHexDump(buf: Buffer, label: string, maxBytes: number): void {
         let ascii = '';
         for (let j = 0; j < 16; j++) {
             if (j < chunk.length) {
-                const byte = chunk[j];
+                const byte = chunk[j]!;
                 ascii += byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.';
             } else {
                 ascii += ' ';
@@ -98,7 +98,7 @@ function formatHexDump(buf: Buffer, label: string, maxBytes: number): void {
 function formatHexBytes(buf: Buffer): string {
     const hexArray: number[] = [];
     for (let i = 0; i < buf.length; i++) {
-        hexArray.push(buf[i]);
+        hexArray.push(buf[i]!);
     }
     return hexArray.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
 }

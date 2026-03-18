@@ -1,17 +1,30 @@
 import { Router, type Request, type Response } from 'express';
-import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
-import { LoginClient } from '../../login/LoginClient';
-import { GameClient } from '../../game/GameClient';
+import { LoginClientNew } from '../../login/LoginClient';
+import { GameClientNew } from '../../game/GameClient';
 import { Logger } from '../../logger/Logger';
 import { CONFIG } from '../../config';
 import type { SessionData } from '../../login/types';
+import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { DI_TOKENS } from '../../config/di/Container';
+import type { ICharacterRepository, IWorldRepository, IInventoryRepository, IConnectionRepository } from '../../domain/repositories';
+import { ConnectionPhase } from '../../domain/repositories/IConnectionRepository';
+import type { IEventBus, IPacketProcessor } from '../../application/ports';
+
+// Repository accessors
+const container = architectureBridge.getContainer();
+const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+const getWorldRepo = () => container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
+const getInventoryRepo = () => container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
+const getEventBus = () => container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+const getPacketProcessor = () => container.resolve<IPacketProcessor>(DI_TOKENS.PacketProcessor).getOrThrow();
+const getConnectionRepo = () => container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
 
 const router = Router();
 
 // Track active clients for connection management
-let activeLoginClient: LoginClient | null = null;
-let activeGameClient: GameClient | null = null;
+let activeLoginClient: LoginClientNew | null = null;
+let activeGameClient: GameClientNew | null = null;
 let reconnectTimeout: NodeJS.Timeout | null = null;
 
 /**
@@ -39,26 +52,32 @@ function createGameSession(overrideConfig?: Partial<LoginConfig>): void {
     Logger.info('ConnectionRoute', `User: ${config.Username}`);
     Logger.info('ConnectionRoute', `Server: ${config.ServerId}`);
 
-    // Update connection state
-    GameStateStore.updateConnection({
-        phase: 'LOGIN_CONNECTING',
-        loginServer: { connected: false, host: config.LoginIp, port: config.LoginPort }
-    });
+    // Connection state is handled by the clients updating the ConnectionRepository
+    const connectionRepo = getConnectionRepo();
 
-    activeLoginClient = new LoginClient(config as unknown as typeof CONFIG, (session: SessionData) => {
-        Logger.info('ConnectionRoute', 'Login Server auth successful');
-        Logger.info('ConnectionRoute', `Game Server: ${session.gameServerIp}:${session.gameServerPort}`);
+    // Create clients with dependencies
+    const eventBus = getEventBus();
+    const packetProcessor = getPacketProcessor();
+    
+    activeLoginClient = new LoginClientNew(
+        config as unknown as typeof CONFIG, 
+        (session: SessionData) => {
+            Logger.info('ConnectionRoute', 'Login Server auth successful');
+            Logger.info('ConnectionRoute', `Game Server: ${session.gameServerIp}:${session.gameServerPort}`);
 
-        // Update connection state
-        GameStateStore.updateConnection({
-            phase: 'LOGIN_COMPLETE',
-            loginServer: { connected: true, host: config.LoginIp, port: config.LoginPort }
-        });
-
-        // Create and start GameClient
-        activeGameClient = new GameClient(session);
-        activeGameClient.start();
-    });
+            // Create and start GameClient
+            activeGameClient = new GameClientNew(session, {
+                eventBus,
+                packetProcessor,
+                characterRepo: getCharRepo(),
+                worldRepo: getWorldRepo(),
+                inventoryRepo: getInventoryRepo(),
+                connectionRepo,
+            });
+            activeGameClient.start();
+        },
+        { eventBus, connectionRepo }
+    );
 
     activeLoginClient.start();
 }
@@ -70,15 +89,20 @@ function createGameSession(overrideConfig?: Partial<LoginConfig>): void {
  */
 router.post('/connect', (req: Request, res: Response) => {
     const { overrideConfig } = req.body;
-    const connection = GameStateStore.getConnection();
+    const connectionRepo = getConnectionRepo();
+    const connectionPhase = connectionRepo.get().phase;
 
     // Check if already connected or connecting
-    if (connection.phase === 'IN_GAME' || connection.phase === 'LOGIN_CONNECTING' || connection.phase === 'GAME_CONNECTING') {
+    if (connectionPhase === ConnectionPhase.IN_GAME || 
+        connectionPhase === ConnectionPhase.LOGIN_CONNECTING || 
+        connectionPhase === ConnectionPhase.ENTERING_GAME ||
+        connectionPhase === ConnectionPhase.LOGIN_AUTHENTICATING ||
+        connectionPhase === ConnectionPhase.SELECTING_CHARACTER) {
         res.status(409).json({
             success: false,
             error: {
                 code: 'ALREADY_CONNECTING',
-                message: `Already in ${connection.phase} phase`
+                message: `Already in ${connectionPhase} phase`
             },
             meta: {
                 timestamp: new Date().toISOString(),
@@ -112,7 +136,7 @@ router.post('/connect', (req: Request, res: Response) => {
             success: true,
             data: {
                 message: 'Connection initiated',
-                phase: 'LOGIN_CONNECTING',
+                phase: ConnectionPhase.LOGIN_CONNECTING,
                 overrideConfig: overrideConfig || null
             },
             meta: {
@@ -141,9 +165,10 @@ router.post('/connect', (req: Request, res: Response) => {
  * Gracefully disconnect from server.
  */
 router.post('/disconnect', (req: Request, res: Response) => {
-    const connection = GameStateStore.getConnection();
+    const connectionRepo = getConnectionRepo();
+    const connectionPhase = connectionRepo.get().phase;
 
-    if (connection.phase === 'DISCONNECTED') {
+    if (connectionPhase === 'DISCONNECTED') {
         res.status(400).json({
             success: false,
             error: {
@@ -179,18 +204,14 @@ router.post('/disconnect', (req: Request, res: Response) => {
             activeLoginClient = null;
         }
 
+        connectionRepo.reset();
+
         // Unregister from command manager
         GameCommandManager.setGameClient(null);
 
-        // Update connection state
-        GameStateStore.updateConnection({
-            phase: 'DISCONNECTED',
-            gameServer: { connected: false, host: '', port: 0 },
-            loginServer: { connected: false, host: '', port: 0 }
-        });
-
-        // Reset game state
-        GameStateStore.reset();
+        // Reset repositories
+        getCharRepo().reset();
+        getWorldRepo().reset();
 
         res.json({
             success: true,
@@ -227,7 +248,8 @@ router.post('/reconnect', (req: Request, res: Response) => {
     const { delayMs } = req.body;
     const delay = delayMs || 3000;
 
-    const connection = GameStateStore.getConnection();
+    const connectionRepo = getConnectionRepo();
+    const connectionPhase = connectionRepo.get().phase;
 
     // Clear any pending reconnect
     if (reconnectTimeout) {
@@ -248,8 +270,9 @@ router.post('/reconnect', (req: Request, res: Response) => {
     // Unregister from command manager
     GameCommandManager.setGameClient(null);
 
-    // Reset game state
-    GameStateStore.reset();
+    // Reset repositories
+    getCharRepo().reset();
+    getWorldRepo().reset();
 
     // Schedule reconnect
     reconnectTimeout = setTimeout(() => {
@@ -264,7 +287,7 @@ router.post('/reconnect', (req: Request, res: Response) => {
         data: {
             message: 'Reconnect scheduled',
             delayMs: delay,
-            previousPhase: connection.phase
+            previousPhase: connectionPhase
         },
         meta: {
             timestamp: new Date().toISOString(),

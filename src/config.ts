@@ -14,7 +14,7 @@ export const CONFIG = {
 export const API_CONFIG = {
     port: 3000,
     host: '0.0.0.0',
-    apiKey: process.env.API_KEY || '',  // Empty = no auth required
+    apiKey: process.env['API_KEY'] || '',  // Empty = no auth required
     enableCors: true,
     rateLimit: {
         windowMs: 1000, // 1 second

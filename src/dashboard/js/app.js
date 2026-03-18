@@ -442,6 +442,17 @@ class DashboardApp {
             this.updateActionButtons();
         });
 
+        // Granular connection phase updates
+        wsClient.addEventListener('connection.phase_changed', (e) => {
+            // console.log('[DashboardApp] Phase changed:', e.detail);
+            if (e.detail && e.detail.phase) {
+                this.connectionStatus = e.detail.phase;
+                this.isInGame = this.connectionStatus === 'IN_GAME';
+                this.updateConnectionStatus();
+                this.updateActionButtons();
+            }
+        });
+
         // Initial connection
         // console.log('[DashboardApp] Connecting WebSocket...');
         wsClient.connect();

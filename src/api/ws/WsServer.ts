@@ -1,25 +1,42 @@
+/**
+ * @fileoverview WsServerNew - WebSocket сервер с новой архитектурой
+ * Использует IEventBus вместо legacy EventBus
+ * @module api/ws
+ */
+
 import { WebSocketServer, WebSocket } from 'ws';
 import { parse } from 'url';
 import type { IncomingMessage, Server } from 'http';
 import { API_CONFIG } from '../../config';
 import { Logger } from '../../logger/Logger';
-import { EventBus, type GameEvent, type EventChannel } from '../../core/EventBus';
+import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { DI_TOKENS } from '../../config/di/Container';
+import type { IEventBus } from '../../application/ports';
+import type { IConnectionRepository } from '../../domain/repositories';
+
+/**
+ * Configuration options for WsServer
+ */
+export interface WsServerOptions {
+    port?: number;
+    debug?: boolean;
+}
 
 interface WsClient {
     ws: WebSocket;
     id: string;
-    channels: Set<EventChannel>;
+    channels: Set<string>;
     isAlive: boolean;
 }
 
 interface SubscribeMessage {
     type: 'subscribe';
-    channels: EventChannel[];
+    channels: string[];
 }
 
 interface UnsubscribeMessage {
     type: 'unsubscribe';
-    channels: EventChannel[];
+    channels: string[];
 }
 
 interface PingMessage {
@@ -28,20 +45,39 @@ interface PingMessage {
 
 type WsMessage = SubscribeMessage | UnsubscribeMessage | PingMessage;
 
-export class WsServer {
+/**
+ * WebSocket сервер с новой архитектурой
+ */
+export class WsServerNew {
     private wss: WebSocketServer | null = null;
     private clients: Map<WebSocket, WsClient> = new Map();
     private pingInterval: NodeJS.Timeout | null = null;
+    private options: WsServerOptions = {};
+    private unsubscribeEventBus: (() => void) | null = null;
 
-    start(server?: Server): void {
-        this.wss = new WebSocketServer({
-            server,
-            verifyClient: (info: { req: IncomingMessage }) => this.verifyClient(info)
-        });
+    /**
+     * Start WebSocket server
+     */
+    start(server?: Server, options: WsServerOptions = {}): void {
+        this.options = { port: 8080, debug: false, ...options };
+
+        if (server) {
+            this.wss = new WebSocketServer({
+                server,
+                verifyClient: (info: { req: IncomingMessage }) => this.verifyClient(info)
+            });
+            Logger.info('WsServer', `WebSocket server started in shared mode at ws://localhost:${API_CONFIG.port}/ws`);
+        } else {
+            this.wss = new WebSocketServer({
+                port: this.options.port,
+                verifyClient: (info: { req: IncomingMessage }) => this.verifyClient(info)
+            });
+            Logger.info('WsServer', `WebSocket server started in standalone mode at ws://localhost:${this.options.port}`);
+        }
 
         this.wss.on('connection', this.handleConnection.bind(this));
 
-        // Start ping/pong to detect dead connections
+        // Start ping/pong
         this.pingInterval = setInterval(() => {
             this.clients.forEach((client) => {
                 if (!client.isAlive) {
@@ -54,22 +90,50 @@ export class WsServer {
             });
         }, 30000);
 
-        // Subscribe to EventBus
-        EventBus.onAny((event: GameEvent) => {
-            this.broadcast(event);
+        // Subscribe to EventBus (new architecture)
+        this.subscribeToEventBus();
+    }
+
+    /**
+     * Subscribe to new architecture EventBus
+     */
+    private subscribeToEventBus(): void {
+        const container = architectureBridge.getContainer();
+        const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+
+        const subscription = eventBus.subscribeAll((event: { type: string; channel?: string; payload: unknown; timestamp: Date }) => {
+            this.broadcastEvent(event);
         });
 
-        Logger.info('WsServer', `WebSocket server started at ws://localhost:${API_CONFIG.port}/ws`);
+        this.unsubscribeEventBus = () => subscription.unsubscribe();
+    }
+
+    /**
+     * Broadcast any JSON data to all connected WebSocket clients
+     */
+    broadcast(data: Record<string, unknown>): void {
+        const message = JSON.stringify(data);
+        let sentCount = 0;
+
+        this.clients.forEach((client) => {
+            if (client.ws.readyState === WebSocket.OPEN) {
+                client.ws.send(message);
+                sentCount++;
+            }
+        });
+
+        if (this.options.debug) {
+            Logger.debug('WsServer', `Broadcast sent to ${sentCount} clients: ${message.slice(0, 200)}...`);
+        }
     }
 
     private verifyClient(info: { req: IncomingMessage }): boolean {
-        // If no apiKey configured, skip authentication
         if (!API_CONFIG.apiKey) {
             return true;
         }
 
         const { query } = parse(info.req.url || '', true);
-        const token = query.token as string;
+        const token = query['token'] as string;
 
         if (!token || token !== API_CONFIG.apiKey) {
             Logger.warn('WsServer', 'WebSocket connection rejected: invalid token');
@@ -95,11 +159,26 @@ export class WsServer {
         this.sendToClient(client, {
             type: 'system.connected',
             channel: 'system',
-            data: {
+            payload: {
                 phase: 'WS_CONNECTED',
                 characterName: `Connected to L2TS Event Stream (${clientId})`
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date()
+        });
+
+        // Send current connection phase
+        const connectionRepo = architectureBridge.getContainer().resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
+        const connectionState = connectionRepo.get();
+        
+        this.sendToClient(client, {
+            type: 'connection.phase_changed',
+            channel: 'system',
+            payload: {
+                phase: connectionState.phase,
+                host: connectionState.host,
+                port: connectionState.port
+            },
+            timestamp: new Date()
         });
 
         ws.on('message', (data: Buffer) => {
@@ -137,8 +216,8 @@ export class WsServer {
                     this.sendToClient(client, {
                         type: 'pong',
                         channel: 'system',
-                        data: {},
-                        timestamp: new Date().toISOString()
+                        payload: {},
+                        timestamp: new Date()
                     });
                     break;
 
@@ -146,11 +225,11 @@ export class WsServer {
                     this.sendToClient(client, {
                         type: 'system.error',
                         channel: 'system',
-                        data: {
+                        payload: {
                             code: 'INVALID_MESSAGE',
                             message: `Unknown message type: ${(message as { type: string }).type}`
                         },
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date()
                     });
             }
         } catch (error) {
@@ -158,18 +237,18 @@ export class WsServer {
             this.sendToClient(client, {
                 type: 'system.error',
                 channel: 'system',
-                data: {
+                payload: {
                     code: 'INVALID_MESSAGE',
                     message: 'Invalid JSON message'
                 },
-                timestamp: new Date().toISOString()
+                timestamp: new Date()
             });
         }
     }
 
-    private handleSubscribe(client: WsClient, channels: EventChannel[]): void {
-        const validChannels: EventChannel[] = ['system', 'character', 'combat', 'chat', 'world', 'movement', 'party', 'inventory'];
-        
+    private handleSubscribe(client: WsClient, channels: string[]): void {
+        const validChannels = ['system', 'character', 'combat', 'chat', 'world', 'movement', 'party', 'inventory'];
+
         for (const channel of channels) {
             if (validChannels.includes(channel)) {
                 client.channels.add(channel);
@@ -179,16 +258,16 @@ export class WsServer {
         this.sendToClient(client, {
             type: 'system.subscribed',
             channel: 'system',
-            data: {
+            payload: {
                 channels: Array.from(client.channels)
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date()
         });
 
         Logger.debug('WsServer', `Client ${client.id} subscribed to: ${Array.from(client.channels).join(', ')}`);
     }
 
-    private handleUnsubscribe(client: WsClient, channels: EventChannel[]): void {
+    private handleUnsubscribe(client: WsClient, channels: string[]): void {
         for (const channel of channels) {
             client.channels.delete(channel);
         }
@@ -196,30 +275,70 @@ export class WsServer {
         this.sendToClient(client, {
             type: 'system.unsubscribed',
             channel: 'system',
-            data: {
+            payload: {
                 channels: Array.from(client.channels)
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date()
         });
     }
 
-    private sendToClient(client: WsClient, event: GameEvent): void {
+    private sendToClient(client: WsClient, event: { type: string; channel: string; payload: unknown; timestamp: Date }): void {
         if (client.ws.readyState === WebSocket.OPEN) {
-            client.ws.send(JSON.stringify(event));
+            client.ws.send(JSON.stringify({
+                ...event,
+                timestamp: event.timestamp.toISOString()
+            }));
         }
     }
 
-    private broadcast(event: GameEvent): void {
+    private broadcastEvent(event: { type: string; channel?: string; payload: unknown; timestamp: Date }): void {
+        // Determine channel from event type if not specified
+        const channel = event.channel || this.getChannelForEvent(event.type);
+
         this.clients.forEach((client) => {
-            if (client.channels.has(event.channel)) {
-                this.sendToClient(client, event);
+            if (client.channels.has(channel)) {
+                this.sendToClient(client, {
+                    type: event.type,
+                    channel,
+                    payload: event.payload,
+                    timestamp: event.timestamp,
+                });
             }
         });
+    }
+
+    private getChannelForEvent(eventType: string): string {
+        if (eventType.startsWith('character.')) return 'character';
+        if (eventType.startsWith('world.')) return 'world';
+        if (eventType.startsWith('combat.')) return 'combat';
+        if (eventType.startsWith('chat.')) return 'chat';
+        if (eventType.startsWith('inventory.')) return 'inventory';
+        if (eventType.startsWith('movement.')) return 'movement';
+        if (eventType.startsWith('party.')) return 'party';
+        return 'system';
+    }
+
+    /**
+     * Get the number of connected clients
+     */
+    getClientCount(): number {
+        return this.clients.size;
+    }
+
+    /**
+     * Check if server is running
+     */
+    isRunning(): boolean {
+        return this.wss !== null;
     }
 
     stop(): void {
         if (this.pingInterval) {
             clearInterval(this.pingInterval);
+        }
+
+        if (this.unsubscribeEventBus) {
+            this.unsubscribeEventBus();
         }
 
         this.clients.forEach((client) => {

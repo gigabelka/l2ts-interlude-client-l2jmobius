@@ -22,20 +22,20 @@ class ScrambledRSAKey {
     Logger.logCryptoSingle('RSA SCRAMBLED (first 16)', scrambled.subarray(0, 16));
 
     for (let i = 0; i < 0x40; i++) {
-      n[0x40 + i] ^= n[i];
+      n[0x40 + i]! ^= n[i]!;
     }
 
     for (let i = 0; i < 4; i++) {
-      n[0x0D + i] ^= n[0x34 + i];
+      n[0x0D + i]! ^= n[0x34 + i]!;
     }
 
     for (let i = 0; i < 0x40; i++) {
-      n[i] ^= n[0x40 + i];
+      n[i]! ^= n[0x40 + i]!;
     }
 
     for (let i = 0; i < 4; i++) {
-      const tmp    = n[0x00 + i];
-      n[0x00 + i]  = n[0x4D + i];
+      const tmp    = n[0x00 + i]!;
+      n[0x00 + i]  = n[0x4D + i]!;
       n[0x4D + i]  = tmp;
     }
 

@@ -1,6 +1,5 @@
 import { Router, type Request, type Response } from 'express';
 import { Logger } from '../../logger/Logger';
-import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
 
 const router = Router();

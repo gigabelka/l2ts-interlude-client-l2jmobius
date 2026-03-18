@@ -1,53 +1,30 @@
 /**
- * @fileoverview Точка входа в приложение (после рефакторинга)
- * Чистая инициализация с разделением ответственности
+ * @fileoverview Точка входа в приложение (Clean Architecture)
  * @module index
  */
 
 import { CONFIG } from './config';
 import { Logger } from './logger/Logger';
 
-// Core
-import { EventBus } from './core/EventBus';
-import { characterManager, worldManager } from './core/state';
-
-// Network
-import { packetDispatcher, GameOpcode } from './network/protocol/PacketDispatcher';
-
-// Packets
-import { CharInfoPacket } from './packets/incoming/game/CharInfoPacket';
+// New Architecture
+import { architectureBridge } from './infrastructure/integration/NewArchitectureBridge';
+import { DI_TOKENS } from './config/di/Container';
+import type { IEventBus, IPacketProcessor } from './application/ports';
+import type { ICharacterRepository, IWorldRepository, IInventoryRepository, IConnectionRepository } from './domain/repositories';
 
 // Game
-import { LoginClient } from './login/LoginClient';
-import { GameClient } from './game/GameClient';
-import { GameState } from './game/GameState';
+import { GameClientNew } from './game/GameClient';
+import { LoginClientNew } from './login/LoginClient';
+
 
 // API
 import { ApiServer } from './api/ApiServer';
-import { WsServer } from './api/ws/WsServer';
+import { WsServerNew } from './api/ws/WsServer';
 
 // UI
-import { getDashboard } from './ui/Dashboard';
+import { getDashboard, destroyDashboard } from './ui/Dashboard';
 
 import type { SessionData } from './login/types';
-
-// Импорты для регистрации пакетов (нужно добавить в проект)
-import { CryptInitPacket } from './game/packets/incoming/CryptInitPacket';
-import { CharSelectInfoPacket } from './game/packets/incoming/CharSelectInfoPacket';
-import { CharSelectedPacket } from './game/packets/incoming/CharSelectedPacket';
-import { UserInfoPacket } from './game/packets/incoming/UserInfoPacket';
-import { NpcInfoPacket } from './game/packets/incoming/NpcInfoPacket';
-import { SpawnItemPacket } from './game/packets/incoming/SpawnItemPacket';
-import { DropItemPacket } from './game/packets/incoming/DropItemPacket';
-import { GetItemPacket } from './game/packets/incoming/GetItemPacket';
-import { ItemListPacket } from './game/packets/incoming/ItemListPacket';
-import { AttackPacket } from './game/packets/incoming/AttackPacket';
-import { StatusUpdatePacket } from './game/packets/incoming/StatusUpdatePacket';
-import { MagicSkillUsePacket } from './game/packets/incoming/MagicSkillUsePacket';
-import { SkillListPacket } from './game/packets/incoming/SkillListPacket';
-import { CreatureSayPacket } from './game/packets/incoming/CreatureSayPacket';
-import { MoveToLocationPacket } from './game/packets/incoming/MoveToLocationPacket';
-import { NetPingRequestPacket } from './game/packets/incoming/NetPingRequestPacket';
 
 // ============================================================================
 // ИНИЦИАЛИЗАЦИЯ
@@ -57,101 +34,25 @@ import { NetPingRequestPacket } from './game/packets/incoming/NetPingRequestPack
  * Инициализация логирования
  */
 function initLogging(): void {
-    const logLevel = process.env.LOG_LEVEL?.toUpperCase() || 'ERROR';
+    const logLevel = process.env['LOG_LEVEL']?.toUpperCase() || 'ERROR';
     Logger.level = logLevel as 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 }
 
 /**
- * Регистрация обработчиков пакетов (вместо гигантского switch)
+ * Инициализация новой архитектуры
  */
-function registerPacketHandlers(): void {
-    Logger.info('Bootstrap', 'Registering packet handlers...');
-
-    // Используем декларативную регистрацию вместо switch-case
-    packetDispatcher
-        // Auth & Connection
-        .register(GameOpcode.CRYPT_INIT_1, CryptInitPacket, { 
-            condition: (state) => state === GameState.WAIT_CRYPT_INIT 
-        })
-        .register(GameOpcode.CRYPT_INIT_2, CryptInitPacket, { 
-            condition: (state) => state === GameState.WAIT_CRYPT_INIT 
-        })
-        
-        // Character selection
-        .register(GameOpcode.CHAR_SELECT_INFO_1, CharSelectInfoPacket, {
-            condition: (state) => state === GameState.WAIT_CHAR_LIST || state === GameState.WAIT_CHAR_SELECTED,
-            priority: 10
-        })
-        .register(GameOpcode.CHAR_SELECTED, CharSelectedPacket)
-        
-        // Player info
-        .register(GameOpcode.USER_INFO, UserInfoPacket, {
-            condition: (state) => state === GameState.WAIT_USER_INFO || state === GameState.IN_GAME,
-            priority: 10
-        })
-        
-        // Other players
-        .register(GameOpcode.CHAR_INFO, CharInfoPacket, {
-            condition: (state) => state === GameState.IN_GAME
-        })
-        
-        // NPCs
-        .register(GameOpcode.NPC_INFO, NpcInfoPacket, {
-            condition: (state) => state === GameState.IN_GAME
-        })
-        
-        // Items
-        .register(GameOpcode.SPAWN_ITEM, SpawnItemPacket)
-        .register(GameOpcode.DROP_ITEM, DropItemPacket)
-        .register(GameOpcode.GET_ITEM, GetItemPacket)
-        .register(GameOpcode.ITEM_LIST, ItemListPacket)
-        
-        // Combat
-        .register(GameOpcode.ATTACK, AttackPacket)
-        .register(GameOpcode.STATUS_UPDATE, StatusUpdatePacket)
-        .register(GameOpcode.MAGIC_SKILL_USE, MagicSkillUsePacket)
-        .register(GameOpcode.SKILL_LIST, SkillListPacket)
-        
-        // Chat
-        .register(GameOpcode.CREATURE_SAY, CreatureSayPacket)
-        
-        // Movement
-        .register(GameOpcode.MOVE_TO_LOCATION, MoveToLocationPacket)
-        
-        // Ping
-        .register(GameOpcode.NET_PING, NetPingRequestPacket);
-
-    // Middleware для логирования всех пакетов
-    packetDispatcher.use((context, next) => {
-        Logger.debug('PacketMiddleware', 
-            `Processing opcode 0x${context.opcode.toString(16).padStart(2, '0')} in state ${context.state}`
-        );
-        next();
-    });
-
-    Logger.info('Bootstrap', `Registered ${packetDispatcher.getRegisteredOpcodes().length} packet handlers`);
-}
-
-/**
- * Инициализация Event-Driven UI
- */
-function initDashboard(): void {
-    const dashboard = getDashboard({
-        autoRender: true,
-        renderInterval: 2000,
-        colored: true,
-        verbose: Logger.level === 'DEBUG'
-    });
-
-    dashboard.start();
+function initArchitecture(): void {
+    const mode = (process.env['ARCHITECTURE_MODE'] as 'ADAPTER' | 'NEW') || 'NEW';
+    architectureBridge.initialize(mode);
+    Logger.info('Bootstrap', `Architecture initialized in ${mode} mode`);
 }
 
 /**
  * Инициализация API сервера
  */
-async function initApiServer(): Promise<{ api: ApiServer; ws: WsServer }> {
+async function initApiServer(): Promise<{ api: ApiServer; ws: WsServerNew }> {
     const apiServer = new ApiServer();
-    const wsServer = new WsServer();
+    const wsServer = new WsServerNew();
 
     return new Promise((resolve, reject) => {
         apiServer.start(() => {
@@ -163,10 +64,24 @@ async function initApiServer(): Promise<{ api: ApiServer; ws: WsServer }> {
 
             wsServer.start(httpServer);
             Logger.info('Bootstrap', '✅ API Server and WebSocket are ready!');
-            
+
             resolve({ api: apiServer, ws: wsServer });
         });
     });
+}
+
+/**
+ * Инициализация Dashboard
+ */
+function initDashboard(): void {
+    const dashboard = getDashboard({
+        autoRender: true,
+        renderInterval: 2000,
+        colored: true,
+        verbose: Logger.level === 'DEBUG'
+    });
+
+    dashboard.start();
 }
 
 // ============================================================================
@@ -182,27 +97,44 @@ function onLoginComplete(session: SessionData): void {
     Logger.info('Bootstrap', `Game Server: ${session.gameServerIp}:${session.gameServerPort}`);
     Logger.info('Bootstrap', '='.repeat(60));
 
+    // Получаем зависимости из контейнера
+    const container = architectureBridge.getContainer();
+    const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+    const packetProcessor = container.resolve<IPacketProcessor>(DI_TOKENS.PacketProcessor).getOrThrow();
+    const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+    const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
+    const invRepo = container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
+    const connectionRepo = container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
+
     // Запускаем Game Client
-    // Character will be initialized when UserInfo packet is received
-    const gameClient = new GameClient(session);
+    const gameClient = new GameClientNew(session, {
+        eventBus,
+        packetProcessor,
+        characterRepo: charRepo,
+        worldRepo,
+        inventoryRepo: invRepo,
+        connectionRepo,
+    });
     gameClient.start();
 }
 
 /**
  * Graceful shutdown
  */
-function shutdown(services: { api: ApiServer; ws: WsServer }): void {
+function shutdown(services: { api: ApiServer; ws: WsServerNew }): void {
     Logger.info('Shutdown', 'Shutting down gracefully...');
-    
+
     services.api.stop();
     services.ws.stop();
-    
-    // Очищаем состояние
-    characterManager.reset();
-    worldManager.clear();
-    
+
+    // Очищаем репозитории
+    const container = architectureBridge.getContainer();
+    container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow().reset();
+    container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow().reset();
+    container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow().reset();
+    container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow().reset();
+
     // Останавливаем Dashboard
-    const { destroyDashboard } = require('./ui/Dashboard');
     destroyDashboard();
 
     process.exit(0);
@@ -217,7 +149,7 @@ async function main(): Promise<void> {
     initLogging();
 
     Logger.info('Bootstrap', '='.repeat(60));
-    Logger.info('Bootstrap', '🎮 L2 Headless Client — Interlude CT0');
+    Logger.info('Bootstrap', '🎮 L2 Headless Client — Interlude CT0 (Clean Architecture)');
     Logger.info('Bootstrap', '='.repeat(60));
     Logger.info('Bootstrap', `API Server : http://${CONFIG.LoginIp}:3000`);
     Logger.info('Bootstrap', `Login      : ${CONFIG.LoginIp}:${CONFIG.LoginPort}`);
@@ -225,13 +157,13 @@ async function main(): Promise<void> {
     Logger.info('Bootstrap', `Server     : ${CONFIG.ServerId}`);
     Logger.info('Bootstrap', '='.repeat(60));
 
-    // 2. Регистрация обработчиков пакетов
-    registerPacketHandlers();
+    // 2. Инициализация архитектуры
+    initArchitecture();
 
     // 3. Инициализация API сервера
     const services = await initApiServer();
 
-    // 4. Инициализация Event-Driven UI (подписывается на события)
+    // 4. Инициализация Dashboard
     initDashboard();
 
     // 5. Настройка graceful shutdown
@@ -243,12 +175,16 @@ async function main(): Promise<void> {
     });
 
     // 6. Запуск подключения к игре (если включено)
-    const autoConnect = process.env.AUTO_CONNECT_GAME !== 'false';
+    const autoConnect = process.env['AUTO_CONNECT_GAME'] !== 'false';
     if (autoConnect) {
         Logger.info('Bootstrap', 'Starting Login Client...');
-        
+
         setTimeout(() => {
-            const loginClient = new LoginClient(CONFIG, onLoginComplete);
+            const container = architectureBridge.getContainer();
+            const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+            const connectionRepo = container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
+
+            const loginClient = new LoginClientNew(CONFIG, onLoginComplete, { eventBus, connectionRepo });
             loginClient.start();
         }, 1000);
     } else {
@@ -263,4 +199,4 @@ main().catch((error) => {
 });
 
 // Экспорты для programmatic access
-export { packetDispatcher, characterManager, worldManager, getDashboard };
+export { architectureBridge };

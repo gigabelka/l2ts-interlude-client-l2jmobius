@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>L2 Packet Sniffer | Developer Console</title>
+    <style>
+        /* ========================================
+           CSS Variables & Reset
+           ======================================== */
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-primary: #58a6ff;
+            --accent-success: #3fb950;
+            --accent-warning: #d29922;
+            --accent-danger: #f85149;
+            --accent-info: #58a6ff;
+            --accent-purple: #a371f7;
+            --accent-orange: #fb8500;
+            --font-mono: 'SF Mono', 'Consolas', 'Monaco', 'Cascadia Code', 'Fira Code', monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: var(--font-sans);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        /* ========================================
+           Layout
+           ======================================== */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Left Sidebar - Filters */
+        .sidebar {
+            width: 320px;
+            min-width: 320px;
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            background-color: var(--bg-tertiary);
+        }
+
+        .sidebar-header h1 {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-primary);
+        }
+
+        .sidebar-header h1::before {
+            content: '📡';
+            font-size: 18px;
+        }
+
+        .sidebar-header .subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .sidebar-content {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            flex: 1;
+        }
+
+        /* Right Panel - Logs */
+        .main-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-primary);
+            min-width: 0;
+        }
+
+        .toolbar {
+            height: 48px;
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            gap: 12px;
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+        }
+
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .log-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .status-bar {
+            height: 28px;
+            background-color: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* ========================================
+           Connection Panel
+           ======================================== */
+        .connection-panel {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--text-muted);
+            transition: background-color 0.3s;
+        }
+
+        .status-dot.connected {
+            background-color: var(--accent-success);
+            box-shadow: 0 0 8px var(--accent-success);
+        }
+
+        .status-dot.connecting {
+            background-color: var(--accent-warning);
+            animation: pulse 1s infinite;
+        }
+
+        .status-dot.error {
+            background-color: var(--accent-danger);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .connection-url {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            word-break: break-all;
+        }
+
+        .connection-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* ========================================
+           Form Elements
+           ======================================== */
+        .btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover:not(:disabled) {
+            background-color: var(--border-color);
+            border-color: var(--text-secondary);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background-color: #79c0ff;
+            border-color: #79c0ff;
+        }
+
+        .btn-danger {
+            background-color: var(--accent-danger);
+            border-color: var(--accent-danger);
+            color: #fff;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background-color: #ff7b72;
+            border-color: #ff7b72;
+        }
+
+        .btn-warning {
+            background-color: var(--accent-warning);
+            border-color: var(--accent-warning);
+            color: #000;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background-color: #e3b341;
+            border-color: #e3b341;
+        }
+
+        .btn-active {
+            background-color: var(--accent-warning);
+            border-color: var(--accent-warning);
+            color: #000;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-field:focus {
+            border-color: var(--accent-primary);
+        }
+
+        .input-field::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* ========================================
+           Filter Groups
+           ======================================== */
+        .filter-section {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .filter-section-header {
+            padding: 10px 12px;
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-section-content {
+            padding: 12px;
+        }
+
+        .filter-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 0;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .filter-item:hover {
+            color: var(--text-primary);
+        }
+
+        .filter-item input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent-primary);
+            cursor: pointer;
+        }
+
+        .filter-item label {
+            flex: 1;
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .filter-item .count {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
+        .filter-description {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-left: 26px;
+            margin-top: -4px;
+            margin-bottom: 4px;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .quick-actions .btn {
+            justify-content: center;
+        }
+
+        /* ========================================
+           Packet Log Entries
+           ======================================== */
+        .packet-entry {
+            margin-bottom: 4px;
+            border-radius: 6px;
+            overflow: hidden;
+            animation: slideIn 0.15s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .packet-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 10px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+
+        .packet-header:hover {
+            background-color: var(--bg-tertiary);
+        }
+
+        .packet-entry.collapsed .packet-header {
+            border-radius: 6px;
+        }
+
+        .packet-time {
+            color: var(--text-muted);
+            font-size: 11px;
+            min-width: 70px;
+        }
+
+        .packet-type-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .packet-type-chat { background-color: rgba(163, 113, 247, 0.2); color: var(--accent-purple); }
+        .packet-type-movement { background-color: rgba(88, 166, 255, 0.2); color: var(--accent-primary); }
+        .packet-type-status { background-color: rgba(63, 185, 80, 0.2); color: var(--accent-success); }
+        .packet-type-inventory { background-color: rgba(210, 153, 34, 0.2); color: var(--accent-warning); }
+        .packet-type-combat { background-color: rgba(248, 81, 73, 0.2); color: var(--accent-danger); }
+        .packet-type-system { background-color: rgba(139, 148, 158, 0.2); color: var(--text-secondary); }
+        .packet-type-other { background-color: rgba(110, 118, 129, 0.2); color: var(--text-muted); }
+
+        .packet-name {
+            flex: 1;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .packet-opcode {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            background-color: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .packet-toggle {
+            color: var(--text-muted);
+            transition: transform 0.2s;
+        }
+
+        .packet-entry.collapsed .packet-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .packet-body {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            padding: 12px;
+            overflow-x: auto;
+        }
+
+        .packet-entry.collapsed .packet-body {
+            display: none;
+        }
+
+        .packet-json {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #a8d5a2;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        /* JSON Syntax Highlighting */
+        .json-key { color: #7ee787; }
+        .json-string { color: #a5d6ff; }
+        .json-number { color: #79c0ff; }
+        .json-boolean { color: #ff7b72; }
+        .json-null { color: #ff7b72; }
+
+        /* ========================================
+           Scrollbar Styling
+           ======================================== */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background-color: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background-color: var(--border-color);
+            border-radius: 5px;
+            border: 2px solid var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background-color: var(--text-muted);
+        }
+
+        /* ========================================
+           Empty State
+           ======================================== */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 40px;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state p {
+            font-size: 13px;
+            max-width: 400px;
+        }
+
+        /* ========================================
+           Stats & Info
+           ======================================== */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .stat-item {
+            background-color: var(--bg-tertiary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: var(--font-mono);
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .info-text {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .info-text code {
+            background-color: var(--bg-tertiary);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: 10px;
+        }
+
+        /* ========================================
+           Pause Overlay
+           ======================================== */
+        .pause-overlay {
+            position: absolute;
+            top: 48px;
+            left: 320px;
+            right: 0;
+            background-color: rgba(210, 153, 34, 0.1);
+            border-bottom: 1px solid var(--accent-warning);
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--accent-warning);
+            z-index: 100;
+        }
+
+        .pause-overlay.hidden {
+            display: none;
+        }
+
+        /* Hide pause overlay when sidebar is collapsed on mobile */
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                max-height: 40vh;
+            }
+            
+            .pause-overlay {
+                left: 0;
+                top: auto;
+                bottom: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left Sidebar - Filters & Controls -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>L2 Packet Sniffer</h1>
+                <div class="subtitle">Developer Console v1.0</div>
+            </div>
+
+            <div class="sidebar-content">
+                <!-- Connection Panel -->
+                <div class="connection-panel">
+                    <div class="connection-status">
+                        <span class="status-dot" id="status-dot"></span>
+                        <span id="status-text">Disconnected</span>
+                    </div>
+                    <div class="connection-url" id="connection-url">ws://localhost:8080</div>
+                    <div class="connection-buttons">
+                        <button class="btn btn-primary" id="btn-connect">Connect</button>
+                        <button class="btn" id="btn-disconnect" disabled>Disconnect</button>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-total">0</div>
+                        <div class="stat-label">Total</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-rate">0</div>
+                        <div class="stat-label">/sec</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-filtered">0</div>
+                        <div class="stat-label">Shown</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-hidden">0</div>
+                        <div class="stat-label">Hidden</div>
+                    </div>
+                </div>
+
+                <!-- Text Filter -->
+                <div class="filter-section">
+                    <div class="filter-section-header">🔍 Quick Filter</div>
+                    <div class="filter-section-content">
+                        <input type="text" class="input-field" id="text-filter" 
+                               placeholder="Opcode (0x04) or name...">
+                        <div class="info-text" style="margin-top: 8px;">
+                            Filter by packet opcode or name. Use <code>,</code> for multiple values.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category Filters -->
+                <div class="filter-section">
+                    <div class="filter-section-header">📂 Categories</div>
+                    <div class="filter-section-content">
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-chat" checked>
+                            <label for="filter-chat">
+                                Chat
+                                <span class="count" id="count-chat">0</span>
+                            </label>
+                        </div>
+                        <div class="filter-description">Say2, Tell, Shout, Party, Clan</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-movement">
+                            <label for="filter-movement">
+                                Movement
+                                <span class="count" id="count-movement">0</span>
+                            </label>
+                        </div>
+                        <div class="filter-description">MoveToLocation, ValidatePosition, StopMove</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-status" checked>
+                            <label for="filter-status">
+                                Status
+                                <span class="count" id="count-status">0</span>
+                            </label>
+                        </div>
+                        <div class="filter-description">UserInfo, CharInfo, StatusUpdate</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-inventory" checked>
+                            <label for="filter-inventory">
+                                Inventory
+                                <span class="count" id="count-inventory">0</span>
+                            </label>
+                        </div>
+                        <div class="filter-description">ItemList, InventoryUpdate, GetItem</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-combat" checked>
+                            <label for="filter-combat">
+                                Combat
+                                <span class="count" id="count-combat">0</span>
+                            </label>
+                        </div>
+                        <div class="filter-description">Attack, MagicSkillUse, Die</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-system" checked>
+                            <label for="filter-system">
+                                System
+                                <span class="count" id="count-system">0</span>
+                            </label>
+                        </div>
+                        <div class="filter-description">Auth, Crypt, ServerList</div>
+
+                        <div class="filter-item">
+                            <input type="checkbox" id="filter-other" checked>
+                            <label for="filter-other">
+                                Other
+                                <span class="count" id="count-other">0</span>
+                            </label>
+                        </div>
+                        <div class="filter-description">All uncategorized packets</div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="filter-section">
+                    <div class="filter-section-header">⚡ Actions</div>
+                    <div class="filter-section-content">
+                        <div class="quick-actions">
+                            <button class="btn" id="btn-clear">
+                                🗑️ Clear
+                            </button>
+                            <button class="btn" id="btn-copy">
+                                📋 Copy
+                            </button>
+                            <button class="btn btn-warning" id="btn-pause">
+                                ⏸️ Pause
+                            </button>
+                            <button class="btn" id="btn-scroll" title="Auto-scroll">
+                                📜 Scroll
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Info -->
+                <div class="info-text">
+                    <strong>Tip:</strong> Click on any packet header to collapse/expand JSON. Use filters to reduce spam from movement packets.
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Panel - Logs -->
+        <main class="main-panel">
+            <!-- Pause Overlay -->
+            <div class="pause-overlay hidden" id="pause-overlay">
+                <span>⏸️ Display Paused</span>
+                <span id="pause-buffered">(0 buffered)</span>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <input type="text" class="input-field" id="toolbar-filter" 
+                           placeholder="🔍 Filter visible packets...">
+                </div>
+                <div class="toolbar-right">
+                    <span class="info-text" id="buffer-status"></span>
+                    <button class="btn btn-primary" id="btn-export">
+                        📥 Export
+                    </button>
+                </div>
+            </div>
+
+            <!-- Log Container -->
+            <div class="log-container" id="log-container">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📡</div>
+                    <h3>Ready to Capture</h3>
+                    <p>Click "Connect" to start receiving packets from the L2 server. Use filters on the left to control what gets displayed.</p>
+                </div>
+            </div>
+
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <span id="status-left">Not connected</span>
+                <span id="status-right">L2 Packet Sniffer v1.0</span>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ========================================
+        // Configuration & State
+        // ========================================
+        const CONFIG = {
+            wsUrl: 'ws://localhost:8080',
+            maxPackets: 1000,           // Maximum packets to keep in DOM
+            maxBuffer: 10000,           // Maximum buffered packets when paused
+            scrollThreshold: 100,       // px from bottom to trigger auto-scroll
+            reconnectDelay: 3000,
+        };
+
+        // Packet categories mapping
+        const PACKET_CATEGORIES = {
+            chat: ['Say2', 'CreatureSay', 'Tell', 'Shout', 'Trade', 'Party', 'Clan', 'Alliance', 'Hero'],
+            movement: ['MoveToLocation', 'ValidatePosition', 'StopMove', 'MoveToPawn', 'CharMoveToLocation'],
+            status: ['UserInfo', 'CharInfo', 'CharSelected', 'StatusUpdate', 'AbnormalStatusUpdate', 'ExBrExtraUserInfo'],
+            inventory: ['ItemList', 'InventoryUpdate', 'GetItem', 'DropItem', 'SpawnItem', 'EquipItem', 'UnequipItem'],
+            combat: ['Attack', 'MagicSkillUse', 'MagicSkillLaunched', 'Die', 'Revive', 'AttackCanceled', 'TargetSelected', 'TargetUnselected'],
+            system: ['ProtocolVersion', 'CryptInit', 'AuthRequest', 'AuthLogin', 'ServerList', 'PlayOk', 'LoginOk', 'GameGuard']
+        };
+
+        // State
+        const state = {
+            ws: null,
+            isConnected: false,
+            isPaused: false,
+            autoScroll: true,
+            packets: [],
+            bufferedPackets: [],
+            stats: {
+                total: 0,
+                shown: 0,
+                hidden: 0,
+                rate: 0,
+                byCategory: {
+                    chat: 0, movement: 0, status: 0, inventory: 0, 
+                    combat: 0, system: 0, other: 0
+                }
+            },
+            lastSecondPackets: 0
+        };
+
+        // DOM Elements
+        const els = {};
+
+        // ========================================
+        // Initialization
+        // ========================================
+        document.addEventListener('DOMContentLoaded', () => {
+            cacheElements();
+            bindEvents();
+            updateStats();
+        });
+
+        function cacheElements() {
+            // Connection
+            els.statusDot = document.getElementById('status-dot');
+            els.statusText = document.getElementById('status-text');
+            els.connectionUrl = document.getElementById('connection-url');
+            els.btnConnect = document.getElementById('btn-connect');
+            els.btnDisconnect = document.getElementById('btn-disconnect');
+
+            // Stats
+            els.statTotal = document.getElementById('stat-total');
+            els.statRate = document.getElementById('stat-rate');
+            els.statFiltered = document.getElementById('stat-filtered');
+            els.statHidden = document.getElementById('stat-hidden');
+
+            // Filters
+            els.textFilter = document.getElementById('text-filter');
+            els.toolbarFilter = document.getElementById('toolbar-filter');
+            
+            // Category checkboxes
+            els.filters = {
+                chat: document.getElementById('filter-chat'),
+                movement: document.getElementById('filter-movement'),
+                status: document.getElementById('filter-status'),
+                inventory: document.getElementById('filter-inventory'),
+                combat: document.getElementById('filter-combat'),
+                system: document.getElementById('filter-system'),
+                other: document.getElementById('filter-other')
+            };
+
+            // Category counts
+            els.counts = {
+                chat: document.getElementById('count-chat'),
+                movement: document.getElementById('count-movement'),
+                status: document.getElementById('count-status'),
+                inventory: document.getElementById('count-inventory'),
+                combat: document.getElementById('count-combat'),
+                system: document.getElementById('count-system'),
+                other: document.getElementById('count-other')
+            };
+
+            // Actions
+            els.btnClear = document.getElementById('btn-clear');
+            els.btnCopy = document.getElementById('btn-copy');
+            els.btnPause = document.getElementById('btn-pause');
+            els.btnScroll = document.getElementById('btn-scroll');
+            els.btnExport = document.getElementById('btn-export');
+
+            // Main panel
+            els.pauseOverlay = document.getElementById('pause-overlay');
+            els.pauseBuffered = document.getElementById('pause-buffered');
+            els.logContainer = document.getElementById('log-container');
+            els.statusLeft = document.getElementById('status-left');
+            els.statusRight = document.getElementById('status-right');
+            els.bufferStatus = document.getElementById('buffer-status');
+        }
+
+        function bindEvents() {
+            // Connection
+            els.btnConnect.addEventListener('click', connect);
+            els.btnDisconnect.addEventListener('click', disconnect);
+
+            // Actions
+            els.btnClear.addEventListener('click', clearLogs);
+            els.btnCopy.addEventListener('click', copyLogs);
+            els.btnPause.addEventListener('click', togglePause);
+            els.btnScroll.addEventListener('click', toggleScroll);
+            els.btnExport.addEventListener('click', exportLogs);
+
+            // Filters
+            els.textFilter.addEventListener('input', () => {
+                els.toolbarFilter.value = els.textFilter.value;
+                applyToolbarFilter();
+            });
+            
+            els.toolbarFilter.addEventListener('input', () => {
+                els.textFilter.value = els.toolbarFilter.value;
+                applyToolbarFilter();
+            });
+
+            // Category filters - re-render when changed
+            Object.values(els.filters).forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    // Re-apply filter to existing packets
+                    applyToolbarFilter();
+                });
+            });
+
+            // Scroll detection
+            els.logContainer.addEventListener('scroll', () => {
+                const nearBottom = isNearBottom();
+                if (state.autoScroll !== nearBottom) {
+                    state.autoScroll = nearBottom;
+                    updateScrollButton();
+                }
+            });
+        }
+
+        // ========================================
+        // WebSocket Connection
+        // ========================================
+        function connect() {
+            if (state.ws?.readyState === WebSocket.OPEN) {
+                log('Already connected', 'info');
+                return;
+            }
+
+            updateConnectionStatus('connecting');
+
+            try {
+                state.ws = new WebSocket(CONFIG.wsUrl);
+
+                state.ws.onopen = () => {
+                    console.log('[WS] Connected');
+                    state.isConnected = true;
+                    updateConnectionStatus('connected');
+                    
+                    if (state.packets.length === 0) {
+                        clearLogs();
+                    }
+                    
+                    log('Connected to WebSocket server', 'success');
+                };
+
+                state.ws.onmessage = (event) => {
+                    try {
+                        const packet = JSON.parse(event.data);
+                        handlePacket(packet);
+                    } catch (err) {
+                        console.error('[WS] Parse error:', err);
+                        handlePacket({
+                            type: 'parse.error',
+                            raw: event.data.slice(0, 200),
+                            error: err.message
+                        });
+                    }
+                };
+
+                state.ws.onerror = (err) => {
+                    console.error('[WS] Error:', err);
+                    log('WebSocket error occurred', 'error');
+                };
+
+                state.ws.onclose = () => {
+                    console.log('[WS] Disconnected');
+                    state.isConnected = false;
+                    updateConnectionStatus('disconnected');
+                    log('Disconnected from server', 'warning');
+                };
+
+            } catch (err) {
+                console.error('[WS] Failed to connect:', err);
+                updateConnectionStatus('error');
+                log(`Connection failed: ${err.message}`, 'error');
+            }
+        }
+
+        function disconnect() {
+            if (state.ws) {
+                state.ws.close();
+                state.ws = null;
+            }
+            state.isConnected = false;
+            updateConnectionStatus('disconnected');
+        }
+
+        // ========================================
+        // Packet Handling
+        // ========================================
+        function handlePacket(packet) {
+            state.stats.total++;
+            state.lastSecondPackets++;
+
+            // Determine packet category
+            const category = categorizePacket(packet);
+            state.stats.byCategory[category]++;
+
+            // Check if should be filtered out
+            const shouldShow = shouldShowPacket(packet, category);
+
+            if (shouldShow) {
+                state.stats.shown++;
+            } else {
+                state.stats.hidden++;
+            }
+
+            // Store packet
+            const packetData = {
+                id: Date.now() + Math.random(),
+                timestamp: new Date(),
+                data: packet,
+                category,
+                shown: shouldShow
+            };
+
+            state.packets.push(packetData);
+
+            // Limit stored packets
+            if (state.packets.length > CONFIG.maxPackets) {
+                const removed = state.packets.shift();
+                if (removed.shown) {
+                    const el = document.getElementById(`packet-${removed.id}`);
+                    if (el) el.remove();
+                }
+            }
+
+            // Render or buffer
+            if (state.isPaused) {
+                if (shouldShow) {
+                    state.bufferedPackets.push(packetData);
+                    // Limit buffer size
+                    if (state.bufferedPackets.length > CONFIG.maxBuffer) {
+                        state.bufferedPackets.shift();
+                    }
+                    updatePauseOverlay();
+                }
+            } else if (shouldShow) {
+                renderPacket(packetData);
+                if (state.autoScroll) {
+                    scrollToBottom();
+                }
+            }
+
+            updateStats();
+        }
+
+        function categorizePacket(packet) {
+            const packetName = packet.packetName || packet.type || '';
+            const type = (packet.type || '').toLowerCase();
+            
+            for (const [category, patterns] of Object.entries(PACKET_CATEGORIES)) {
+                for (const pattern of patterns) {
+                    if (packetName.includes(pattern) || 
+                        type.includes(pattern.toLowerCase())) {
+                        return category;
+                    }
+                }
+            }
+            
+            return 'other';
+        }
+
+        function shouldShowPacket(packet, category) {
+            // Check category filter
+            if (!els.filters[category]?.checked) {
+                return false;
+            }
+
+            // Check text filter
+            const filterText = els.textFilter.value.trim().toLowerCase();
+            if (filterText) {
+                const packetName = (packet.packetName || '').toLowerCase();
+                const packetType = (packet.type || '').toLowerCase();
+                const opcode = packet.opcode !== undefined ? 
+                    packet.opcode.toString() : '';
+                const opcodeHex = packet.opcodeHex || 
+                    (packet.opcode !== undefined ? `0x${packet.opcode.toString(16).padStart(2, '0')}` : '');
+                
+                // Support multiple filters separated by comma
+                const filters = filterText.split(',').map(f => f.trim()).filter(Boolean);
+                
+                return filters.some(f => 
+                    packetName.includes(f) ||
+                    packetType.includes(f) ||
+                    opcode === f ||
+                    opcodeHex.toLowerCase() === f
+                );
+            }
+
+            return true;
+        }
+
+        // ========================================
+        // Rendering
+        // ========================================
+        function renderPacket(packetData) {
+            const { id, timestamp, data, category } = packetData;
+            
+            // Remove empty state if exists
+            const emptyState = els.logContainer.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+
+            const entry = document.createElement('div');
+            entry.className = 'packet-entry';
+            entry.id = `packet-${id}`;
+            entry.dataset.category = category;
+            entry.dataset.name = (data.packetName || data.type || '').toLowerCase();
+            entry.dataset.opcode = data.opcode !== undefined ? data.opcode.toString() : '';
+
+            const timeStr = formatTime(timestamp);
+            const packetName = data.packetName || data.type || 'Unknown';
+            const opcode = data.opcode;
+            const opcodeStr = opcode !== undefined ? 
+                `0x${opcode.toString(16).padStart(2, '0').toUpperCase()}` : '--';
+
+            entry.innerHTML = `
+                <div class="packet-header" onclick="togglePacket(${id})">
+                    <span class="packet-time">${timeStr}</span>
+                    <span class="packet-type-badge packet-type-${category}">${category}</span>
+                    <span class="packet-name">${escapeHtml(packetName)}</span>
+                    <span class="packet-opcode">${opcodeStr}</span>
+                    <span class="packet-toggle">▼</span>
+                </div>
+                <div class="packet-body">
+                    <pre class="packet-json">${formatJson(data)}</pre>
+                </div>
+            `;
+
+            els.logContainer.appendChild(entry);
+        }
+
+        function formatJson(obj) {
+            const json = JSON.stringify(obj, null, 2);
+            return syntaxHighlight(json);
+        }
+
+        function syntaxHighlight(json) {
+            return json.replace(
+                /(".*?"):\s*(".*?"|\d+|true|false|null)/g,
+                (match, key, value) => {
+                    let coloredValue = value;
+                    if (value.startsWith('"')) {
+                        coloredValue = `<span class="json-string">${value}</span>`;
+                    } else if (/^-?\d/.test(value)) {
+                        coloredValue = `<span class="json-number">${value}</span>`;
+                    } else if (value === 'true' || value === 'false') {
+                        coloredValue = `<span class="json-boolean">${value}</span>`;
+                    } else if (value === 'null') {
+                        coloredValue = `<span class="json-null">${value}</span>`;
+                    }
+                    return `<span class="json-key">${key}</span>: ${coloredValue}`;
+                }
+            );
+        }
+
+        // Global function for onclick
+        window.togglePacket = function(id) {
+            const entry = document.getElementById(`packet-${id}`);
+            if (entry) {
+                entry.classList.toggle('collapsed');
+            }
+        };
+
+        // ========================================
+        // Filtering & Toolbar
+        // ========================================
+        function applyToolbarFilter() {
+            const filterText = els.toolbarFilter.value.trim().toLowerCase();
+            const packets = els.logContainer.querySelectorAll('.packet-entry');
+            
+            packets.forEach(packet => {
+                if (!filterText) {
+                    packet.style.display = '';
+                    return;
+                }
+                
+                const name = packet.dataset.name || '';
+                const opcode = packet.dataset.opcode || '';
+                const matches = name.includes(filterText) || opcode === filterText;
+                packet.style.display = matches ? '' : 'none';
+            });
+        }
+
+        // ========================================
+        // Pause / Buffer
+        // ========================================
+        function togglePause() {
+            state.isPaused = !state.isPaused;
+            
+            if (state.isPaused) {
+                els.btnPause.textContent = '▶️ Resume';
+                els.btnPause.classList.add('btn-active');
+                els.pauseOverlay.classList.remove('hidden');
+                log('Display paused - packets buffering in background', 'warning');
+            } else {
+                els.btnPause.textContent = '⏸️ Pause';
+                els.btnPause.classList.remove('btn-active');
+                els.pauseOverlay.classList.add('hidden');
+                
+                // Flush buffered packets
+                flushBuffer();
+                log(`Resumed - displayed ${state.bufferedPackets.length} buffered packets`, 'success');
+                state.bufferedPackets = [];
+            }
+        }
+
+        function flushBuffer() {
+            state.bufferedPackets.forEach(packet => {
+                renderPacket(packet);
+            });
+            
+            if (state.autoScroll) {
+                scrollToBottom();
+            }
+            
+            updatePauseOverlay();
+        }
+
+        function updatePauseOverlay() {
+            els.pauseBuffered.textContent = `(${state.bufferedPackets.length} buffered)`;
+        }
+
+        // ========================================
+        // Actions
+        // ========================================
+        function clearLogs() {
+            els.logContainer.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📝</div>
+                    <h3>Log Cleared</h3>
+                    <p>Waiting for new packets...</p>
+                </div>
+            `;
+            state.packets = [];
+            state.bufferedPackets = [];
+            state.stats = {
+                total: 0,
+                shown: 0,
+                hidden: 0,
+                rate: 0,
+                byCategory: {
+                    chat: 0, movement: 0, status: 0, inventory: 0, 
+                    combat: 0, system: 0, other: 0
+                }
+            };
+            updateStats();
+            updatePauseOverlay();
+            log('Log cleared', 'info');
+        }
+
+        async function copyLogs() {
+            const visiblePackets = Array.from(els.logContainer.querySelectorAll('.packet-entry'))
+                .filter(el => el.style.display !== 'none')
+                .map(el => {
+                    const id = parseInt(el.id.replace('packet-', ''));
+                    const packet = state.packets.find(p => p.id === id);
+                    return packet ? JSON.stringify(packet.data, null, 2) : '';
+                })
+                .filter(Boolean)
+                .join('\n---\n');
+
+            if (!visiblePackets) {
+                log('No packets to copy', 'warning');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(visiblePackets);
+                log(`Copied ${visiblePackets.split('---').length} packets to clipboard`, 'success');
+            } catch (err) {
+                log('Failed to copy to clipboard', 'error');
+                console.error(err);
+            }
+        }
+
+        function exportLogs() {
+            const data = {
+                timestamp: new Date().toISOString(),
+                total: state.stats.total,
+                packets: state.packets.map(p => ({
+                    timestamp: p.timestamp,
+                    category: p.category,
+                    data: p.data
+                }))
+            };
+
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `l2-packets-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            log(`Exported ${data.packets.length} packets to file`, 'success');
+        }
+
+        function toggleScroll() {
+            state.autoScroll = !state.autoScroll;
+            updateScrollButton();
+            
+            if (state.autoScroll) {
+                scrollToBottom();
+            }
+        }
+
+        function updateScrollButton() {
+            els.btnScroll.textContent = state.autoScroll ? '📜 Scroll: ON' : '📜 Scroll: OFF';
+            els.btnScroll.classList.toggle('btn-active', state.autoScroll);
+        }
+
+        // ========================================
+        // UI Updates
+        // ========================================
+        function updateConnectionStatus(status) {
+            els.statusDot.className = 'status-dot ' + status;
+            
+            const statusMap = {
+                connected: { text: 'Connected', btnConnect: false, btnDisconnect: true },
+                connecting: { text: 'Connecting...', btnConnect: false, btnDisconnect: true },
+                disconnected: { text: 'Disconnected', btnConnect: true, btnDisconnect: false },
+                error: { text: 'Error', btnConnect: true, btnDisconnect: false }
+            };
+
+            const info = statusMap[status] || statusMap.disconnected;
+            els.statusText.textContent = info.text;
+            els.btnConnect.disabled = !info.btnConnect;
+            els.btnDisconnect.disabled = !info.btnDisconnect;
+            
+            els.statusLeft.textContent = state.isConnected ? 
+                `Connected to ${CONFIG.wsUrl}` : 'Not connected';
+        }
+
+        function updateStats() {
+            els.statTotal.textContent = state.stats.total.toLocaleString();
+            els.statFiltered.textContent = state.stats.shown.toLocaleString();
+            els.statHidden.textContent = state.stats.hidden.toLocaleString();
+            els.statRate.textContent = state.stats.rate;
+
+            // Update category counts
+            for (const [cat, count] of Object.entries(state.stats.byCategory)) {
+                if (els.counts[cat]) {
+                    els.counts[cat].textContent = count.toLocaleString();
+                }
+            }
+
+            // Update buffer status
+            if (state.bufferedPackets.length > 0) {
+                els.bufferStatus.textContent = `Buffered: ${state.bufferedPackets.length}`;
+            } else {
+                els.bufferStatus.textContent = '';
+            }
+        }
+
+        function log(message, type = 'info') {
+            console.log(`[Sniffer] ${message}`);
+        }
+
+        // ========================================
+        // Utilities
+        // ========================================
+        function formatTime(date) {
+            return date.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }) + '.' + String(date.getMilliseconds()).padStart(3, '0');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function scrollToBottom() {
+            els.logContainer.scrollTop = els.logContainer.scrollHeight;
+        }
+
+        function isNearBottom() {
+            const threshold = CONFIG.scrollThreshold;
+            const position = els.logContainer.scrollTop + els.logContainer.clientHeight;
+            const height = els.logContainer.scrollHeight;
+            return position >= height - threshold;
+        }
+
+        // Rate calculation
+        setInterval(() => {
+            state.stats.rate = state.lastSecondPackets;
+            state.lastSecondPackets = 0;
+            updateStats();
+        }, 1000);
+
+    </script>
+</body>
+</html>

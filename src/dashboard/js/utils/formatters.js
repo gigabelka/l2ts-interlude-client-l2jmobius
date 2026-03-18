@@ -128,6 +128,7 @@ const Formatters = {
             'SELECTING_CHARACTER': 'Selecting Character...',
             'ENTERING_GAME': 'Entering Game...',
             'IN_GAME': 'In Game',
+            'WAITING_SERVER_SELECT': 'Selecting Server...',
             'ERROR': 'Error'
         };
         return phases[phase] || phase;

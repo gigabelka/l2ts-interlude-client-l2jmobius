@@ -1,4 +1,54 @@
+/**
+ * @fileoverview BlowfishEngine - Blowfish cipher implementation for Lineage 2
+ * 
+ * Implementation of the Blowfish block cipher in ECB mode.
+ * Used for encrypting/decrypting packets during the Login Server phase.
+ * 
+ * Blowfish is a symmetric-key block cipher with:
+ * - Block size: 64 bits (8 bytes)
+ * - Key size: 32-448 bits (variable)
+ * - Rounds: 16
+ * 
+ * This implementation uses pre-computed S-boxes derived from the hexadecimal
+ * digits of pi (3.14159...), as specified by the Blowfish algorithm.
+ * 
+ * @module crypto/BlowfishEngine
+ * @see https://www.schneier.com/academic/blowfish/
+ * @example
+ * ```typescript
+ * const engine = new BlowfishEngine();
+ * engine.init(Buffer.from('my_key_16_bytes_'));
+ * 
+ * // Encrypt 8-byte block
+ * const plaintext = Buffer.alloc(8);
+ * const ciphertext = Buffer.alloc(8);
+ * engine.encryptBlock(plaintext, 0, ciphertext, 0);
+ * 
+ * // Decrypt
+ * const decrypted = Buffer.alloc(8);
+ * engine.decryptBlock(ciphertext, 0, decrypted, 0);
+ * ```
+ */
+
+/**
+ * Blowfish cipher engine for Lineage 2 packet encryption.
+ * 
+ * Implements the Blowfish block cipher with:
+ * - 16 rounds of Feistel network
+ * - Four S-boxes (S0-S3) with 256 entries each
+ * - 18 P-array entries (subkeys)
+ * - Block size: 8 bytes
+ * 
+ * @class BlowfishEngine
+ */
 export default class BlowfishEngine {
+  // ==================== Constants ====================
+
+  /**
+   * P-array initialization vector (hex digits of pi).
+   * Contains 18 32-bit values for key schedule.
+   * @readonly
+   */
   // prettier-ignore
   static readonly  KP: number[] = [
       0x243f6a88, 0x85a308d3, 0x13198a2e, 0x03707344, 0xa4093822, 0x299f31d0,
@@ -6,6 +56,10 @@ export default class BlowfishEngine {
       0xc0ac29b7, 0xc97c50dd, 0x3f84d5b5, 0xb5470917, 0x9216d5d9, 0x8979fb1b
   ];
 
+  /**
+   * S-box 0 initialization vector (hex digits of pi).
+   * @readonly
+   */
   // prettier-ignore
   static readonly KS0: number[] = [
       0xd1310ba6, 0x98dfb5ac, 0x2ffd72db, 0xd01adfb7, 0xb8e1afed, 0x6a267e96,
@@ -53,6 +107,10 @@ export default class BlowfishEngine {
       0x53b02d5d, 0xa99f8fa1, 0x08ba4799, 0x6e85076a
   ];
 
+  /**
+   * S-box 1 initialization vector (hex digits of pi).
+   * @readonly
+   */
   // prettier-ignore
   static readonly KS1: number[] = [
       0x4b7a70e9, 0xb5b32944, 0xdb75092e, 0xc4192623, 0xad6ea6b0, 0x49a7df7d,
@@ -100,6 +158,10 @@ export default class BlowfishEngine {
       0x153e21e7, 0x8fb03d4a, 0xe6e39f2b, 0xdb83adf7
   ];
 
+  /**
+   * S-box 2 initialization vector (hex digits of pi).
+   * @readonly
+   */
   // prettier-ignore
   static readonly KS2: number[] = [
       0xe93d5a68, 0x948140f7, 0xf64c261c, 0x94692934, 0x411520f7, 0x7602d4f7,
@@ -147,6 +209,10 @@ export default class BlowfishEngine {
       0xd79a3234, 0x92638212, 0x670efa8e, 0x406000e0
   ];
 
+  /**
+   * S-box 3 initialization vector (hex digits of pi).
+   * @readonly
+   */
   // prettier-ignore
   static readonly  KS3: number[] = [
       0x3a39ce37, 0xd3faf5cf, 0xabc27737, 0x5ac52d1b, 0x5cb0679e, 0x4fa33742,
@@ -194,17 +260,34 @@ export default class BlowfishEngine {
       0xb74e6132, 0xce77e25b, 0x578fdfe3, 0x3ac372e6
   ];
 
+  /** Number of Feistel rounds (16 for Blowfish). @readonly */
   static readonly ROUNDS: number = 16;
+  /** Block size in bytes (8 for Blowfish 64-bit blocks). @readonly */
   static readonly BLOCK_SIZE: number = 8;
+  /** S-box size (256 entries). @readonly */
   static readonly SBOX_SK: number = 256;
+  /** P-array size (ROUNDS + 2 = 18). @readonly */
   static readonly P_SZ: number = BlowfishEngine.ROUNDS + 2;
+
+  // ==================== Instance State ====================
+
+  /** S-box 0 (256 entries) */
   S0: number[];
+  /** S-box 1 (256 entries) */
   S1: number[];
+  /** S-box 2 (256 entries) */
   S2: number[];
+  /** S-box 3 (256 entries) */
   S3: number[];
+  /** P-array (18 subkeys) */
   P: number[];
+  /** Current encryption key */
   workingKey: Uint8Array;
 
+  /**
+   * Create a new Blowfish engine instance.
+   * Initializes empty S-boxes and P-array.
+   */
   constructor() {
     this.S0 = new Array<number>(BlowfishEngine.SBOX_SK);
     this.S1 = new Array<number>(BlowfishEngine.SBOX_SK);
@@ -214,24 +297,45 @@ export default class BlowfishEngine {
     this.workingKey = new Uint8Array(16);
   }
 
+  /**
+   * Initialize the engine with an encryption key.
+   * 
+   * @param {Uint8Array} key - Encryption key (variable length, max 56 bytes recommended)
+   * @example
+   * ```typescript
+   * const engine = new BlowfishEngine();
+   * engine.init(Buffer.from('my_secret_key_16'));
+   * ```
+   */
   init(key: Uint8Array): void {
     this.workingKey = key;
     this.setKey(this.workingKey);
   }
 
+  /**
+   * Set up the key schedule.
+   * 
+   * This method:
+   * 1. Initializes S-boxes and P-array with pi digits
+   * 2. XORs P-array with key material
+   * 3. Performs key schedule encryption to generate subkeys
+   * 
+   * @private
+   * @param {Uint8Array} key - Encryption key
+   */
   setKey(key: Uint8Array): void {
     /*
      * (1) Initialize the S-boxes and the P-array, with a fixed string This
      * string contains the hexadecimal digits of pi (3.141...)
      */
     for (let i = 0; i < BlowfishEngine.SBOX_SK; i++) {
-      this.S0[i] = BlowfishEngine.KS0[i];
-      this.S1[i] = BlowfishEngine.KS1[i];
-      this.S2[i] = BlowfishEngine.KS2[i];
-      this.S3[i] = BlowfishEngine.KS3[i];
+      this.S0[i] = BlowfishEngine.KS0[i]!;
+      this.S1[i] = BlowfishEngine.KS1[i]!;
+      this.S2[i] = BlowfishEngine.KS2[i]!;
+      this.S3[i] = BlowfishEngine.KS3[i]!;
     }
     for (let i = 0; i < BlowfishEngine.P_SZ; i++) {
-      this.P[i] = BlowfishEngine.KP[i];
+      this.P[i] = BlowfishEngine.KP[i]!;
     }
 
     /*
@@ -247,14 +351,14 @@ export default class BlowfishEngine {
       let data = 0x0000000;
       for (let j = 0; j < 4; j++) {
         // create a 32 bit block
-        data = (data << 8) | (key[keyIndex++] & 0xff);
+        data = (data << 8) | (key[keyIndex++]! & 0xff);
         // wrap when we get to the end of the key
         if (keyIndex >= keyLength) {
           keyIndex = 0;
         }
       }
       // XOR the newly created 32 bit chunk onto the P-array
-      this.P[i] ^= data;
+      this.P[i]! ^= data;
     }
     /*
      * (3) Encrypt the all-zero string with the Blowfish algorithm, using
@@ -273,92 +377,166 @@ export default class BlowfishEngine {
      */
 
     this.processTable(0, 0, this.P);
-    this.processTable(this.P[BlowfishEngine.P_SZ - 2], this.P[BlowfishEngine.P_SZ - 1], this.S0);
-    this.processTable(this.S0[BlowfishEngine.SBOX_SK - 2], this.S0[BlowfishEngine.SBOX_SK - 1], this.S1);
-    this.processTable(this.S1[BlowfishEngine.SBOX_SK - 2], this.S1[BlowfishEngine.SBOX_SK - 1], this.S2);
-    this.processTable(this.S2[BlowfishEngine.SBOX_SK - 2], this.S2[BlowfishEngine.SBOX_SK - 1], this.S3);
+    this.processTable(this.P[BlowfishEngine.P_SZ - 2]!, this.P[BlowfishEngine.P_SZ - 1]!, this.S0);
+    this.processTable(this.S0[BlowfishEngine.SBOX_SK - 2]!, this.S0[BlowfishEngine.SBOX_SK - 1]!, this.S1);
+    this.processTable(this.S1[BlowfishEngine.SBOX_SK - 2]!, this.S1[BlowfishEngine.SBOX_SK - 1]!, this.S2);
+    this.processTable(this.S2[BlowfishEngine.SBOX_SK - 2]!, this.S2[BlowfishEngine.SBOX_SK - 1]!, this.S3);
   }
 
+  /**
+   * Process a table during key schedule generation.
+   * @private
+   * @param {number} xl - Left 32-bit half
+   * @param {number} xr - Right 32-bit half
+   * @param {number[]} table - Table to process (P-array or S-box)
+   */
   processTable(xl: number, xr: number, table: number[]): void {
     const size: number = table.length;
     for (let s = 0; s < size; s += 2) {
-      xl = this.xor(xl, this.P[0]);
+      xl = this.xor(xl, this.P[0]!);
 
       for (let i = 1; i < BlowfishEngine.ROUNDS; i += 2) {
-        xr = this.xor(xr, this.xor(this.F(xl), this.P[i]));
-        xl = this.xor(xl, this.xor(this.F(xr), this.P[i + 1]));
+        xr = this.xor(xr, this.xor(this.F(xl), this.P[i]!));
+        xl = this.xor(xl, this.xor(this.F(xr), this.P[i + 1]!));
       }
-      xr = this.xor(xr, this.P[BlowfishEngine.ROUNDS + 1]);
+      xr = this.xor(xr, this.P[BlowfishEngine.ROUNDS + 1]!);
 
       table[s] = xr;
       table[s + 1] = xl;
       xr = xl; // end of cycle swap
-      xl = table[s];
+      xl = table[s]!;
     }
   }
 
   /**
-   * Function F looks like this:
-   * Divide xL into four eight-bit quarters: a, b, c, and d.
-   * Then, F(xL) = ((S1,a + S2,b mod 232) XOR S3,c) + S4,d mod 232.
-   * F(0xFFFFFF)
-   * ((S1[255] + S2[255]) XOR S3[255]) + S4[255]
-   * ((0x6e85076a + 0xdb83adf7) ^ 0x406000e0) + 0x3ac372e6
-   * @param x
+   * Feistel function F.
+   * 
+   * F(xL) = ((S1,a + S2,b mod 2^32) XOR S3,c) + S4,d mod 2^32
+   * where a, b, c, d are the four bytes of xL
+   * 
+   * @private
+   * @param {number} x - 32-bit input
+   * @returns {number} 32-bit output
    */
   F(x: number): number {
-    return ((this.S0[x >>> 24] + this.S1[(x >>> 16) & 0xff]) ^ this.S2[(x >>> 8) & 0xff]) + this.S3[x & 0xff];
+    return ((this.S0[x >>> 24]! + this.S1[(x >>> 16) & 0xff]!) ^ this.S2[(x >>> 8) & 0xff]!) + this.S3[x & 0xff]!;
   }
 
+  /**
+   * Get the block size for this cipher.
+   * @returns {number} Block size in bytes (always 8 for Blowfish)
+   */
   getBlockSize(): number {
     return BlowfishEngine.BLOCK_SIZE;
   }
 
+  /**
+   * Encrypt a single 8-byte block.
+   * 
+   * @param {Uint8Array} src - Source buffer containing plaintext
+   * @param {number} srcIndex - Starting index in source buffer
+   * @param {Uint8Array} dst - Destination buffer for ciphertext
+   * @param {number} dstIndex - Starting index in destination buffer
+   * @example
+   * ```typescript
+   * const plaintext = Buffer.from([1,2,3,4,5,6,7,8]);
+   * const ciphertext = Buffer.alloc(8);
+   * engine.encryptBlock(plaintext, 0, ciphertext, 0);
+   * ```
+   */
   encryptBlock(src: Uint8Array, srcIndex: number, dst: Uint8Array, dstIndex: number): void {
     let xl: number = this.bytesTo32Bits(src, srcIndex);
     let xr: number = this.bytesTo32Bits(src, srcIndex + 4);
-    xl ^= this.P[0];
+    xl ^= this.P[0]!;
     for (let i = 1; i < BlowfishEngine.ROUNDS; i += 2) {
-      xr ^= this.F(xl) ^ this.P[i];
-      xl ^= this.F(xr) ^ this.P[i + 1];
+      xr ^= this.F(xl) ^ this.P[i]!;
+      xl ^= this.F(xr) ^ this.P[i + 1]!;
     }
-    xr ^= this.P[BlowfishEngine.ROUNDS + 1];
+    xr ^= this.P[BlowfishEngine.ROUNDS + 1]!;
     this.bits32ToBytes(xr, dst, dstIndex);
     this.bits32ToBytes(xl, dst, dstIndex + 4);
   }
 
+  /**
+   * Decrypt a single 8-byte block.
+   * 
+   * @param {Uint8Array} src - Source buffer containing ciphertext
+   * @param {number} srcIndex - Starting index in source buffer
+   * @param {Uint8Array} dst - Destination buffer for plaintext
+   * @param {number} dstIndex - Starting index in destination buffer
+   * @example
+   * ```typescript
+   * const ciphertext = Buffer.from([...]);
+   * const plaintext = Buffer.alloc(8);
+   * engine.decryptBlock(ciphertext, 0, plaintext, 0);
+   * ```
+   */
   decryptBlock(src: Uint8Array, srcIndex: number, dst: Uint8Array, dstIndex: number): void {
     let xl = this.bytesTo32Bits(src, srcIndex);
     let xr = this.bytesTo32Bits(src, srcIndex + 4);
-    xl ^= this.P[BlowfishEngine.ROUNDS + 1];
+    xl ^= this.P[BlowfishEngine.ROUNDS + 1]!;
     for (let i = BlowfishEngine.ROUNDS; i > 0; i -= 2) {
-      xr ^= this.F(xl) ^ this.P[i];
-      xl ^= this.F(xr) ^ this.P[i - 1];
+      xr ^= this.F(xl) ^ this.P[i]!;
+      xl ^= this.F(xr) ^ this.P[i - 1]!;
     }
-    xr ^= this.P[0];
+    xr ^= this.P[0]!;
 
     this.bits32ToBytes(xr, dst, dstIndex);
     this.bits32ToBytes(xl, dst, dstIndex + 4);
   }
 
+  /**
+   * Convert signed 32-bit integer to unsigned.
+   * @private
+   * @param {number} signed - Signed integer
+   * @returns {number} Unsigned integer
+   */
   signedToUnsigned(signed: number): number {
     return signed >>> 0;
   }
 
+  /**
+   * XOR two 32-bit values.
+   * @private
+   * @param {number} a - First value
+   * @param {number} b - Second value
+   * @returns {number} a XOR b
+   */
   xor(a: number, b: number): number {
     return this.signedToUnsigned(a ^ b);
   }
 
+  /**
+   * Add two 32-bit values modulo 2^32.
+   * @private
+   * @param {number} a - First value
+   * @param {number} b - Second value
+   * @returns {number} (a + b) mod 2^32
+   */
   addMod32(a: number, b: number): number {
     return this.signedToUnsigned((a + b) | 0);
   }
 
+  /**
+   * Convert 4 bytes to a 32-bit little-endian integer.
+   * @private
+   * @param {Uint8Array} b - Byte array
+   * @param {number} i - Starting index
+   * @returns {number} 32-bit integer
+   */
   bytesTo32Bits(b: Uint8Array, i: number): number {
     return this.signedToUnsigned(
-      ((b[i + 3] & 0xff) << 24) | ((b[i + 2] & 0xff) << 16) | ((b[i + 1] & 0xff) << 8) | (b[i] & 0xff)
+      ((b[i + 3]! & 0xff) << 24) | ((b[i + 2]! & 0xff) << 16) | ((b[i + 1]! & 0xff) << 8) | (b[i]! & 0xff)
     );
   }
 
+  /**
+   * Convert a 32-bit integer to 4 little-endian bytes.
+   * @private
+   * @param {number} inb - 32-bit integer
+   * @param {Uint8Array} b - Destination byte array
+   * @param {number} offset - Starting index in destination
+   */
   bits32ToBytes(inb: number, b: Uint8Array, offset: number): void {
     b[offset] = inb;
     b[offset + 1] = inb >> 8;

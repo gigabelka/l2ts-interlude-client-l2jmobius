@@ -1,6 +1,7 @@
 /**
  * WebSocket Client for L2 Bot Dashboard
  * Features: Auto-reconnect with exponential backoff, channel subscription, event dispatching
+ * Supports: Shared mode (port 3000/ws) and Standalone mode (port 8080)
  */
 
 class L2WsClient extends EventTarget {
@@ -19,14 +20,62 @@ class L2WsClient extends EventTarget {
         this.subscribedChannels = ['system', 'character', 'combat', 'world'];
         this.isConnected = false;
         this.connectionAttempts = 0;
+        
+        // Connection mode: 'shared' (port 3000/ws) or 'standalone' (port 8080)
+        this.mode = 'shared';
     }
 
     /**
-     * Build WebSocket URL from current location
+     * Build WebSocket URL from current location and mode
      */
     buildWsUrl() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.hostname;
+        
+        if (this.mode === 'standalone') {
+            return `${protocol}//${host}:8080`;
+        }
+        
+        // Shared mode - use same port as HTTP
         return `${protocol}//${window.location.host}/ws`;
+    }
+    
+    /**
+     * Set connection mode and rebuild URL
+     * @param {'shared'|'standalone'} mode 
+     */
+    setMode(mode) {
+        if (this.mode === mode) return;
+        
+        const wasConnected = this.isConnected;
+        
+        // Disconnect if connected
+        if (wasConnected) {
+            this.disconnect();
+        }
+        
+        this.mode = mode;
+        this.url = this.buildWsUrl();
+        
+        console.log(`[WS] Mode changed to: ${mode}, URL: ${this.url}`);
+        
+        // Reconnect if was connected
+        if (wasConnected) {
+            this.shouldReconnect = true;
+            this.connect();
+        }
+        
+        // Dispatch mode change event
+        this.dispatchEvent(new CustomEvent('modeChanged', { 
+            detail: { mode, url: this.url }
+        }));
+    }
+    
+    /**
+     * Get current mode
+     */
+    getMode() {
+        return this.mode;
     }
 
     /**
@@ -115,7 +164,7 @@ class L2WsClient extends EventTarget {
         
         // Dispatch typed event based on message type
         if (message.type) {
-            this.dispatchEvent(new CustomEvent(message.type, { detail: message.data }));
+            this.dispatchEvent(new CustomEvent(message.type, { detail: message.payload || message.data }));
         }
         
         // Dispatch channel event

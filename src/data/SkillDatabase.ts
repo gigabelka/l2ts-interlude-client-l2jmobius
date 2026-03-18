@@ -11,11 +11,8 @@ import type { Skill } from './types';
  */
 export class SkillDatabase {
     private static instance: SkillDatabase;
-    private skillMap: Map<number, Skill>;
 
-    private constructor() {
-        this.skillMap = skillById;
-    }
+    private constructor() {}
 
     public static getInstance(): SkillDatabase {
         if (!SkillDatabase.instance) {

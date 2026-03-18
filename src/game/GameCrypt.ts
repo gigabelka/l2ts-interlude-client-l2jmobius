@@ -18,18 +18,18 @@ export class GameCrypt {
      * @param enableEncryption whether encryption should be enabled
      */
     initKey(xorKeyData: Buffer, enableEncryption: boolean = true): void {
-        if (xorKeyData.length < 8) {
-            throw new Error(`initKey: expected 8 bytes xorKeyData, got ${xorKeyData.length}`);
+        const key = xorKeyData.subarray(0, 8);
+        if (key.length < 8) {
+            throw new Error(`initKey: expected at least 8 bytes for XOR key, got ${key.length}`);
         }
 
-        // Use 8-byte key directly (not duplicated)
-        this.key_sc = Buffer.from(xorKeyData);
-        this.key_cs = Buffer.from(xorKeyData);
+        this.key_sc = Buffer.from(key);
+        this.key_cs = Buffer.from(key);
 
         this.enabled = enableEncryption;
-        this.firstPacket = true;  // First packet after CryptInit is UNENCRYPTED
+        this.firstPacket = true;
 
-        Logger.info('GameCrypt', `XOR keys initialized (8-byte, no duplication). Encryption enabled: ${this.enabled}`);
+        Logger.info('GameCrypt', `XOR keys initialized (8-byte). Encryption enabled: ${this.enabled}`);
         Logger.logKeys('GameCrypt key_cs', this.key_cs);
     }
 
@@ -53,7 +53,7 @@ export class GameCrypt {
         Logger.hexDump('GAME DECRYPT INPUT', result, 16);
 
         for (let k = 0; k < data.length; k++) {
-            result[k] = (result[k] ^ this.key_sc[k & 7]) & 0xFF;
+            result[k] = (result[k]! ^ this.key_sc[k & 7]!) & 0xFF;
         }
 
         Logger.hexDump('GAME DECRYPT OUTPUT', result, 16);
@@ -82,7 +82,7 @@ export class GameCrypt {
         Logger.hexDump('GAME ENCRYPT INPUT', result, 16);
 
         for (let i = 0; i < data.length; i++) {
-            result[i] = (result[i] ^ this.key_cs[i & 7]) & 0xFF;
+            result[i] = (result[i]! ^ this.key_cs[i & 7]!) & 0xFF;
         }
 
         Logger.hexDump('GAME ENCRYPT OUTPUT', result, 16);

@@ -22,6 +22,7 @@ import partyRouter from './routes/party';
 import connectionRouter from './routes/connection';
 import socialRouter from './routes/social';
 
+
 export class ApiServer {
     private app: Application;
     private server: ReturnType<Application['listen']> | null = null;
@@ -83,32 +84,32 @@ export class ApiServer {
         // Dashboard static files (no auth required)
         const dashboardPath = path.join(__dirname, '..', 'dashboard');
         this.app.use(express.static(dashboardPath, {
-            maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0
+            maxAge: process.env['NODE_ENV'] === 'production' ? '1d' : 0
         }));
 
         // Data files (skills.json, etc.) - no auth required
         const dataPath = path.join(__dirname, '..', '..', 'src', 'data');
         this.app.use('/data', express.static(dataPath, {
-            maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0
+            maxAge: process.env['NODE_ENV'] === 'production' ? '1d' : 0
         }));
         
         // OpenAPI spec endpoint
-        this.app.get('/openapi.json', (req: Request, res: Response) => {
+        this.app.get('/openapi.json', (_req: Request, res: Response) => {
             res.sendFile(path.join(dashboardPath, 'openapi.json'));
         });
         
         // Dashboard routes - serve index.html for all dashboard routes
-        this.app.get(['/', '/inventory', '/combat'], (req: Request, res: Response) => {
+        this.app.get(['/', '/inventory', '/combat'], (_req: Request, res: Response) => {
             res.sendFile(path.join(dashboardPath, 'index.html'));
         });
         
         // API Docs (Scalar) - separate HTML file
-        this.app.get('/api-docs', (req: Request, res: Response) => {
+        this.app.get('/api-docs', (_req: Request, res: Response) => {
             res.sendFile(path.join(dashboardPath, 'api-docs.html'));
         });
 
         // Health check (no auth required)
-        this.app.get('/health', (req: Request, res: Response) => {
+        this.app.get('/health', (_req: Request, res: Response) => {
             res.json({
                 status: 'ok',
                 timestamp: new Date().toISOString()

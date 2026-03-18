@@ -1,20 +1,28 @@
 import { Router, type Request, type Response } from 'express';
-import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
 import { Logger } from '../../logger/Logger';
-import { getNpc } from '../../data/loader';
+import { NpcDatabase } from '../../data/NpcDatabase';
+import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { DI_TOKENS } from '../../config/di/Container';
+import type { ICharacterRepository, IWorldRepository } from '../../domain/repositories';
 
 const router = Router();
+
+// Repository accessors
+const container = architectureBridge.getContainer();
+const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+const getWorldRepo = () => container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
 
 /**
  * GET /api/v1/target
  * Returns current target information.
  */
 router.get('/', (req: Request, res: Response) => {
-    const combat = GameStateStore.getCombat();
-    const world = GameStateStore.getWorld();
+    const char = getCharRepo().get();
+    const worldRepo = getWorldRepo();
+    const targetId = char?.targetId;
 
-    if (!combat.targetObjectId) {
+    if (!targetId) {
         res.json({
             success: true,
             data: null,
@@ -27,14 +35,14 @@ router.get('/', (req: Request, res: Response) => {
     }
 
     // Find target in world state
-    const npcTarget = world.npcs.get(combat.targetObjectId);
-    const playerTarget = world.players.get(combat.targetObjectId);
+    const npcTarget = worldRepo.getNpc(targetId);
+    const playerTarget = undefined; // Player repository not yet implemented
     const target = npcTarget || playerTarget;
 
     // Get NPC name from database if available
-    let targetName = combat.targetName;
-    if (npcTarget && combat.targetType === 'NPC') {
-        const npcData = getNpc(npcTarget.npcId);
+    let targetName = target?.name;
+    if (npcTarget) {
+        const npcData = NpcDatabase.getNpc(npcTarget.npcId);
         if (npcData?.name) {
             targetName = npcData.name;
         }
@@ -43,13 +51,13 @@ router.get('/', (req: Request, res: Response) => {
     res.json({
         success: true,
         data: {
-            objectId: combat.targetObjectId,
+            objectId: targetId,
             name: targetName,
-            type: combat.targetType,
+            type: npcTarget ? 'NPC' : 'PLAYER',
             ...(target && {
                 level: target.level,
-                hp: target.hp,
-                position: target.position,
+                hp: target.hp.toJSON(),
+                position: target.position.toJSON(),
                 ...(npcTarget && {
                     npcId: npcTarget.npcId,
                     isAttackable: npcTarget.isAttackable,
@@ -69,10 +77,10 @@ router.get('/', (req: Request, res: Response) => {
  * Switch to next nearest target (NPC).
  */
 router.post('/next', (req: Request, res: Response) => {
-    const character = GameStateStore.getCharacter();
-    const combat = GameStateStore.getCombat();
+    const character = getCharRepo().get();
+    const worldRepo = getWorldRepo();
 
-    if (!character.objectId) {
+    if (!character || !character.id) {
         res.status(503).json({
             success: false,
             error: {
@@ -88,7 +96,7 @@ router.post('/next', (req: Request, res: Response) => {
     }
 
     // Get nearby attackable NPCs within 1200 range, sorted by distance
-    const nearbyNpcs = GameStateStore.getNearbyNpcs(1200, { attackable: true, alive: true })
+    const nearbyNpcs = worldRepo.getNearbyNpcs(character.position, 1200, { attackable: true, alive: true })
         .sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
     if (nearbyNpcs.length === 0) {
@@ -107,41 +115,41 @@ router.post('/next', (req: Request, res: Response) => {
     }
 
     // Find next target
-    let nextTarget = nearbyNpcs[0];
-    const currentTargetId = combat.targetObjectId;
+    let nextTarget = nearbyNpcs[0]!;
+    const currentTargetId = character.targetId;
 
     if (currentTargetId) {
-        const currentIndex = nearbyNpcs.findIndex(npc => npc.objectId === currentTargetId);
+        const currentIndex = nearbyNpcs.findIndex(npc => npc.id === currentTargetId);
         if (currentIndex >= 0 && currentIndex < nearbyNpcs.length - 1) {
             // Select next target in list
-            nextTarget = nearbyNpcs[currentIndex + 1];
+            nextTarget = nearbyNpcs[currentIndex + 1]!;
         } else {
             // Wrap around to first target or keep current if only one
-            nextTarget = nearbyNpcs[0];
+            nextTarget = nearbyNpcs[0]!;
         }
     }
 
     // Get NPC name from database for better display
-    const npcData = getNpc(nextTarget.npcId);
+    const npcData = NpcDatabase.getNpc(nextTarget.npcId);
     const npcName = npcData?.name || nextTarget.name;
 
     // Send Action packet to server to select target
-    const actionSuccess = GameCommandManager.action(nextTarget.objectId, false);
+    const actionSuccess = GameCommandManager.action(nextTarget.id, false);
     
     // Update local state with database name
-    GameStateStore.setTarget(nextTarget.objectId, npcName, 'NPC');
+    character.setTarget(nextTarget.id, npcName, 'NPC');
 
-    Logger.info('TargetRoute', `Next target selected: ${npcName} (${nextTarget.objectId}) at ${nextTarget.distance?.toFixed(1)}m`);
+    Logger.info('TargetRoute', `Next target selected: ${npcName} (${nextTarget.id}) at ${nextTarget.distance?.toFixed(1)}m`);
 
     res.json({
         success: true,
         data: {
-            objectId: nextTarget.objectId,
+            objectId: nextTarget.id,
             name: npcName,
             level: nextTarget.level,
             npcId: nextTarget.npcId,
             distance: nextTarget.distance,
-            hp: nextTarget.hp,
+            hp: nextTarget.hp.toJSON(),
             isAttackable: nextTarget.isAttackable,
             isAggressive: nextTarget.isAggressive,
             actionSent: actionSuccess
@@ -173,7 +181,10 @@ router.post('/set', (req: Request, res: Response) => {
     const actionSuccess = GameCommandManager.action(objectId, false);
 
     // Update local state
-    GameStateStore.setTarget(objectId, name || '', type || 'NPC');
+    const char = getCharRepo().get();
+    if (char) {
+        char.setTarget(objectId, name || '', type || 'NPC');
+    }
 
     res.json({
         success: true,
@@ -195,7 +206,10 @@ router.post('/clear', (req: Request, res: Response) => {
     // Send Action packet with objectId 0 to clear target
     GameCommandManager.action(0, false);
     
-    GameStateStore.setTarget(0, '', undefined);
+    const char = getCharRepo().get();
+    if (char) {
+        char.clearTarget();
+    }
 
     res.json({
         success: true,

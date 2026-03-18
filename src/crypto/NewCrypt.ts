@@ -28,17 +28,17 @@ export default class NewCrypt {
     let i: number;
 
     for (i = offset; i < size - 4; i += 4) {
-      check = raw[i] & 0xff;
-      check |= (raw[i + 1] << 8) & 0xff00;
-      check |= (raw[i + 2] << 0x10) & 0xff0000;
-      check |= (raw[i + 3] << 0x18) & 0xff000000;
+      check = raw[i]! & 0xff;
+      check |= (raw[i + 1]! << 8) & 0xff00;
+      check |= (raw[i + 2]! << 0x10) & 0xff0000;
+      check |= (raw[i + 3]! << 0x18) & 0xff000000;
       chksum ^= check;
     }
 
-    check = raw[i] & 0xff;
-    check |= (raw[i + 1] << 8) & 0xff00;
-    check |= (raw[i + 2] << 0x10) & 0xff0000;
-    check |= (raw[i + 3] << 0x18) & 0xff000000;
+    check = raw[i]! & 0xff;
+    check |= (raw[i + 1]! << 8) & 0xff00;
+    check |= (raw[i + 2]! << 0x10) & 0xff0000;
+    check |= (raw[i + 3]! << 0x18) & 0xff000000;
 
     return check === chksum;
   }
@@ -52,10 +52,10 @@ export default class NewCrypt {
     let i: number;
 
     for (i = offset; i < size - 4; i += 4) {
-      ecx = raw[i] & 0xff;
-      ecx |= (raw[i + 1] << 8) & 0xff00;
-      ecx |= (raw[i + 2] << 0x10) & 0xff0000;
-      ecx |= (raw[i + 3] << 0x18) & 0xff000000;
+      ecx = raw[i]! & 0xff;
+      ecx |= (raw[i + 1]! << 8) & 0xff00;
+      ecx |= (raw[i + 2]! << 0x10) & 0xff0000;
+      ecx |= (raw[i + 3]! << 0x18) & 0xff000000;
       chksum ^= ecx;
     }
 
@@ -73,10 +73,10 @@ export default class NewCrypt {
     let ecx: number = key;
 
     while (stop <= pos) {
-      edx = raw[pos] & 0xff;
-      edx |= (raw[pos + 1] & 0xff) << 8;
-      edx |= (raw[pos + 2] & 0xff) << 16;
-      edx |= (raw[pos + 3] & 0xff) << 24;
+      edx = raw[pos]! & 0xff;
+      edx |= (raw[pos + 1]! & 0xff) << 8;
+      edx |= (raw[pos + 2]! & 0xff) << 16;
+      edx |= (raw[pos + 3]! & 0xff) << 24;
 
       edx ^= ecx;
       ecx -= edx;

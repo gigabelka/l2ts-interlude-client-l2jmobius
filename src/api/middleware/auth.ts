@@ -31,7 +31,7 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
     }
 
     const parts = authHeader.split(' ');
-    if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
+    if (parts.length !== 2 || parts[0]!.toLowerCase() !== 'bearer') {
         res.status(401).json({
             success: false,
             error: {

@@ -83,6 +83,17 @@ class WSMonitor {
      * Setup UI event listeners
      */
     setupUIListeners() {
+        // Connection mode selector
+        const modeRadios = document.querySelectorAll('input[name="ws-mode"]');
+        modeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    wsClient.setMode(e.target.value);
+                    this.addRawEntry('info', `Switched to ${e.target.value} mode: ${wsClient.url}`);
+                }
+            });
+        });
+
         // Connect/Disconnect buttons
         const btnConnect = document.getElementById('ws-btn-connect');
         const btnDisconnect = document.getElementById('ws-btn-disconnect');

@@ -1,22 +1,31 @@
-import { GameClient } from './GameClient';
+/**
+ * @fileoverview GameCommandManager - Рефакторинг с новой архитектурой
+ * Предоставляет интерфейс для отправки команд в игру через API
+ * @module game/GameCommandManager
+ */
+
+import type { IGameClient } from './IGameClient';
 import { Logger } from '../logger/Logger';
-import { GameStateStore } from '../core/GameStateStore';
-import { EventBus } from '../core/EventBus';
-import { MoveToLocation, AttackRequest, Action, RequestSocialAction, Say2, ChatType, SocialActions, ChangeWaitType2, UseSkill, UseItem, DropItem, RequestJoinParty } from './packets/outgoing';
+import { architectureBridge } from '../infrastructure/integration/NewArchitectureBridge';
+import { DI_TOKENS } from '../config/di/Container';
+import type { ICharacterRepository, IWorldRepository } from '../domain/repositories';
+import type { IEventBus } from '../application/ports';
+import { Position } from '../domain/value-objects';
+
+// Outgoing packets
+import { MoveToLocation, AttackRequest, Action, RequestSocialAction, Say2, ChatType, ChangeWaitType2, UseSkill, UseItem, DropItem, RequestJoinParty } from './packets/outgoing';
 
 /**
- * GameCommandManager - Singleton for sending game commands from API
- * 
- * This class provides an interface for API routes to send commands
- * to the game server through the active GameClient instance.
+ * GameCommandManager - Singleton для отправки игровых команд из API
+ * Использует новую архитектуру (Repositories + EventBus)
  */
 class GameCommandManagerClass {
-    private gameClient: GameClient | null = null;
+    private gameClient: IGameClient | null = null;
 
     /**
-     * Register the active GameClient instance
+     * Регистрация активного GameClient
      */
-    setGameClient(client: GameClient | null): void {
+    setGameClient(client: IGameClient | null): void {
         this.gameClient = client;
         if (client) {
             Logger.info('GameCommandManager', 'GameClient registered');
@@ -26,21 +35,26 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Check if game client is available and in game
+     * Проверка готовности (в игре)
      */
     isReady(): boolean {
-        return this.gameClient !== null && GameStateStore.getConnection().phase === 'IN_GAME';
+        const container = architectureBridge.getContainer();
+        const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+        return this.gameClient !== null && charRepo.exists();
     }
 
     /**
-     * Get current character position
+     * Получить текущую позицию персонажа
      */
     getPosition(): { x: number; y: number; z: number } | null {
-        return GameStateStore.getCharacter().position || null;
+        const container = architectureBridge.getContainer();
+        const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+        const char = charRepo.get();
+        return char ? { x: char.position.x, y: char.position.y, z: char.position.z } : null;
     }
 
     /**
-     * Send MoveToLocation packet
+     * Отправить пакет движения
      */
     moveTo(x: number, y: number, z: number): boolean {
         if (!this.isReady()) {
@@ -57,23 +71,40 @@ class GameCommandManagerClass {
         try {
             this.gameClient!.sendPacket(new MoveToLocation(x, y, z, pos.x, pos.y, pos.z, 1));
             Logger.info('GameCommandManager', `MoveTo: ${x}, ${y}, ${z}`);
-            
-            // Update GameStateStore
-            GameStateStore.updatePosition({ x, y, z });
-            
-            // Emit event
-            EventBus.emitEvent({
-                type: 'movement.position_changed',
-                channel: 'movement',
-                data: {
-                    objectId: GameStateStore.getCharacter().objectId || 0,
-                    position: { x, y, z },
-                    speed: GameStateStore.getCharacter().stats?.speed || 0,
-                    isRunning: true
-                },
-                timestamp: new Date().toISOString()
-            });
-            
+
+            // Обновляем позицию через репозиторий
+            const container = architectureBridge.getContainer();
+            const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+            const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+            const char = charRepo.get();
+
+            if (char) {
+                charRepo.update((c) => {
+                    const newPos = Position.create({ x, y, z, heading: c.position.heading });
+                    if (newPos.isOk()) {
+                        c.updatePosition(
+                            newPos.getOrThrow(),
+                            c.combatStats.speed || 0,
+                            true
+                        );
+                    }
+                    return c;
+                });
+
+                // Публикуем событие
+                eventBus.publish({
+                    type: 'movement.position_changed',
+                    channel: 'movement',
+                    payload: {
+                        objectId: char.id,
+                        position: { x, y, z },
+                        speed: char.combatStats.speed || 0,
+                        isRunning: true
+                    },
+                    timestamp: new Date(),
+                });
+            }
+
             return true;
         } catch (error) {
             Logger.error('GameCommandManager', `Move failed: ${error}`);
@@ -82,7 +113,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Send AttackRequest packet
+     * Отправить пакет атаки
      */
     attack(objectId: number, shiftClick: boolean = false): boolean {
         if (!this.isReady()) {
@@ -99,25 +130,31 @@ class GameCommandManagerClass {
         try {
             this.gameClient!.sendPacket(new AttackRequest(objectId, pos.x, pos.y, pos.z, shiftClick));
             Logger.info('GameCommandManager', `Attack: ${objectId}, shift=${shiftClick}`);
-            
-            // Update combat state
-            GameStateStore.setInCombat(true);
-            
-            // Emit event
-            EventBus.emitEvent({
-                type: 'combat.attack_sent',
-                channel: 'combat',
-                data: {
-                    attackerObjectId: GameStateStore.getCharacter().objectId || 0,
-                    targetObjectId: objectId,
-                    damage: 0, // Unknown at this point
-                    isCritical: false,
-                    isMiss: false,
-                    attackType: 'MELEE'
-                },
-                timestamp: new Date().toISOString()
-            });
-            
+
+            // Обновляем боевое состояние
+            const container = architectureBridge.getContainer();
+            const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+            const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+            const char = charRepo.get();
+
+            if (char) {
+                char.setInCombat(true);
+
+                eventBus.publish({
+                    type: 'combat.attack_sent',
+                    channel: 'combat',
+                    payload: {
+                        attackerObjectId: char.id,
+                        targetObjectId: objectId,
+                        damage: 0,
+                        isCritical: false,
+                        isMiss: false,
+                        attackType: 'MELEE'
+                    },
+                    timestamp: new Date(),
+                });
+            }
+
             return true;
         } catch (error) {
             Logger.error('GameCommandManager', `Attack failed: ${error}`);
@@ -126,7 +163,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Send Action packet (for targeting)
+     * Отправить Action пакет (для таргета)
      */
     action(objectId: number, shiftClick: boolean = false): boolean {
         if (!this.isReady()) {
@@ -151,7 +188,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Send RequestSocialAction packet
+     * Отправить социальное действие
      */
     socialAction(actionId: number): boolean {
         if (!this.isReady()) {
@@ -170,8 +207,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Toggle sit/stand
-     * true = Stand, false = Sit
+     * Переключить сид/стоять
      */
     toggleSit(stand: boolean = false): boolean {
         if (!this.isReady()) {
@@ -190,7 +226,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Send Say2 packet (chat message)
+     * Отправить сообщение в чат
      */
     sendChat(message: string, chatType: ChatType = ChatType.ALL, target: string = ''): boolean {
         if (!this.isReady()) {
@@ -201,21 +237,28 @@ class GameCommandManagerClass {
         try {
             this.gameClient!.sendPacket(new Say2(message, chatType, target));
             Logger.info('GameCommandManager', `Chat [${chatType}]: ${message.substring(0, 50)}`);
-            
-            // Emit event
-            EventBus.emitEvent({
-                type: 'chat.message',
-                channel: 'chat',
-                data: {
-                    channel: ChatType[chatType],
-                    message,
-                    senderName: GameStateStore.getCharacter().name || 'Unknown',
-                    senderObjectId: GameStateStore.getCharacter().objectId,
-                    receivedAt: new Date().toISOString()
-                },
-                timestamp: new Date().toISOString()
-            });
-            
+
+            // Публикуем событие
+            const container = architectureBridge.getContainer();
+            const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+            const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+            const char = charRepo.get();
+
+            if (char) {
+                eventBus.publish({
+                    type: 'chat.message',
+                    channel: 'chat',
+                    payload: {
+                        channel: ChatType[chatType],
+                        message,
+                        senderName: char.name,
+                        senderObjectId: char.id,
+                        receivedAt: new Date().toISOString()
+                    },
+                    timestamp: new Date(),
+                });
+            }
+
             return true;
         } catch (error) {
             Logger.error('GameCommandManager', `Chat failed: ${error}`);
@@ -224,8 +267,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Pickup item from ground
-     * In L2 Interlude, need to click (Action) on item to pick it up
+     * Поднять предмет с земли
      */
     async pickupItem(objectId: number): Promise<boolean> {
         if (!this.isReady()) {
@@ -233,49 +275,51 @@ class GameCommandManagerClass {
             return false;
         }
 
-        // Find item in world state
-        const world = GameStateStore.getWorld();
-        const item = world.items.get(objectId);
-        
+        // Ищем предмет в мире
+        const container = architectureBridge.getContainer();
+        const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
+        const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+
+        const item = worldRepo.getItem(objectId);
+
         if (!item) {
             Logger.warn('GameCommandManager', `Item ${objectId} not found`);
             return false;
         }
 
-        // Move to item location first
+        // Двигаемся к предмету
         const moveSuccess = this.moveTo(item.position.x, item.position.y, item.position.z);
-        
+
         if (moveSuccess) {
             Logger.info('GameCommandManager', `Moving to pickup: ${item.name} (${objectId}) at ${item.position.x},${item.position.y},${item.position.z}`);
-            
-            // Emit event
-            EventBus.emitEvent({
+
+            // Публикуем событие
+            eventBus.publish({
                 type: 'world.item_picking_up',
                 channel: 'world',
-                data: {
-                    objectId: item.objectId,
+                payload: {
+                    objectId: item.id,
                     itemId: item.itemId,
                     name: item.name,
                     count: item.count
                 },
-                timestamp: new Date().toISOString()
+                timestamp: new Date(),
             });
-            
-            // Send Action packet on item to pick it up (click on item)
-            // Small delay to ensure we arrived
+
+            // Отправляем Action пакет для поднятия
             setTimeout(() => {
                 this.action(objectId, false);
                 Logger.info('GameCommandManager', `Clicked on item ${objectId} to pickup`);
             }, 500);
-            
+
             return true;
         }
-        
+
         return false;
     }
 
     /**
-     * Pickup nearest item
+     * Поднять ближайший предмет
      */
     async pickupNearestItem(radius: number = 200): Promise<boolean> {
         if (!this.isReady()) {
@@ -283,20 +327,26 @@ class GameCommandManagerClass {
             return false;
         }
 
-        const items = GameStateStore.getNearbyItems(radius);
-        
+        const container = architectureBridge.getContainer();
+        const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
+        const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+        const char = charRepo.get();
+
+        if (!char) return false;
+
+        const items = worldRepo.getNearbyItems(char.position, radius);
+
         if (items.length === 0) {
             Logger.info('GameCommandManager', 'No items nearby to pickup');
             return false;
         }
 
-        // Pickup closest item
-        const item = items[0];
-        return this.pickupItem(item.objectId);
+        // Берем ближайший
+        return this.pickupItem(items[0]!.id);
     }
 
     /**
-     * Send UseSkill packet
+     * Использовать скилл
      */
     useSkill(skillId: number, ctrlPressed: boolean = false, shiftPressed: boolean = false): boolean {
         if (!this.isReady()) {
@@ -315,7 +365,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Send UseItem packet
+     * Использовать предмет
      */
     useItem(objectId: number): boolean {
         if (!this.isReady()) {
@@ -334,7 +384,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Send DropItem packet
+     * Выбросить предмет
      */
     dropItem(objectId: number, count: number, x?: number, y?: number, z?: number): boolean {
         if (!this.isReady()) {
@@ -342,7 +392,7 @@ class GameCommandManagerClass {
             return false;
         }
 
-        // Use current position if coords not provided
+        // Используем текущую позицию если координаты не указаны
         let dropX = x;
         let dropY = y;
         let dropZ = z;
@@ -369,7 +419,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Send RequestJoinParty - invite player to party
+     * Пригласить в пати
      */
     inviteToParty(playerName: string): boolean {
         if (!this.isReady()) {
@@ -388,8 +438,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Leave party - uses /leaveparty chat command
-     * Note: L2 Interlude doesn't have a specific leave party packet
+     * Покинуть пати
      */
     leaveParty(): boolean {
         if (!this.isReady()) {
@@ -398,7 +447,7 @@ class GameCommandManagerClass {
         }
 
         try {
-            // Send /leaveparty command via ALL chat
+            // Отправляем команду через чат
             this.gameClient!.sendPacket(new Say2('/leaveparty', ChatType.ALL, ''));
             Logger.info('GameCommandManager', 'LeaveParty command sent');
             return true;
@@ -409,7 +458,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Stop movement - handled locally (StopMove packet not available in Interlude)
+     * Остановить движение
      */
     stopMove(): boolean {
         if (!this.isReady()) {
@@ -424,8 +473,6 @@ class GameCommandManagerClass {
         }
 
         try {
-            // StopMove packet doesn't exist in Interlude protocol
-            // Just log the action for now - client stops locally
             Logger.info('GameCommandManager', `StopMove at ${pos.x},${pos.y},${pos.z}`);
             return true;
         } catch (error) {
@@ -435,7 +482,7 @@ class GameCommandManagerClass {
     }
 
     /**
-     * Follow target - simplified implementation using Action packet
+     * Следовать за целью
      */
     follow(objectId: number, minDistance: number = 100): boolean {
         if (!this.isReady()) {
@@ -443,16 +490,24 @@ class GameCommandManagerClass {
             return false;
         }
 
-        const world = GameStateStore.getWorld();
-        const target = world.npcs.get(objectId) || world.players.get(objectId);
+        const container = architectureBridge.getContainer();
+        const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
+        const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
+
+        const npc = worldRepo.getNpc(objectId);
+        // TODO: Add player lookup when player repository is implemented
+        const target = npc;
 
         if (!target) {
             Logger.warn('GameCommandManager', `Cannot follow: target ${objectId} not found`);
             return false;
         }
 
-        // Store target in GameStateStore
-        GameStateStore.setTarget(objectId, target.name, world.npcs.has(objectId) ? 'NPC' : 'PLAYER');
+        // Устанавливаем таргет
+        charRepo.update((char) => {
+            char.setTarget(objectId);
+            return char;
+        });
 
         Logger.info('GameCommandManager', `Follow ${target.name} (${objectId}) with minDistance=${minDistance}`);
         return true;

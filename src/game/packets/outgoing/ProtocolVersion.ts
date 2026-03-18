@@ -20,7 +20,7 @@ export class ProtocolVersion implements OutgoingGamePacket {
     }
 
     /** Create packet - just protocol version */
-    static encodeWithSession(loginOkId1: number, loginOkId2: number, playOkId1: number, playOkId2: number): Buffer {
+    static encodeWithSession(): Buffer {
         const w = new PacketWriter();
         w.writeUInt8(0x00);  // opcode for game server
         w.writeInt32LE(CONFIG.Protocol);  // Protocol version as INT32 (4 bytes!)

@@ -10,11 +10,8 @@ import type { Npc } from './types';
  */
 export class NpcDatabase {
     private static instance: NpcDatabase;
-    private npcMap: Map<number, Npc>;
 
-    private constructor() {
-        this.npcMap = npcById;
-    }
+    private constructor() {}
 
     public static getInstance(): NpcDatabase {
         if (!NpcDatabase.instance) {

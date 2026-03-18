@@ -124,9 +124,9 @@ router.post('/send', (req: Request, res: Response) => {
  *   - since: ISO timestamp
  */
 router.get('/history', (req: Request, res: Response) => {
-    const channel = req.query.channel as string | undefined;
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
-    const since = req.query.since as string | undefined;
+    const channel = req.query['channel'] as string | undefined;
+    const limit = Math.min(parseInt(req.query['limit'] as string) || 50, 100);
+    const since = req.query['since'] as string | undefined;
 
     let messages = [...chatHistory];
 

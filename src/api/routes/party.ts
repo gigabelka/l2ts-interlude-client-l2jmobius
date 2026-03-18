@@ -1,8 +1,6 @@
 import { Router, type Request, type Response } from 'express';
-import { GameStateStore } from '../../core/GameStateStore';
 import { GameCommandManager } from '../../game/GameCommandManager';
 import { Logger } from '../../logger/Logger';
-
 const router = Router();
 
 /**
@@ -10,7 +8,9 @@ const router = Router();
  * Returns party information.
  */
 router.get('/', (req: Request, res: Response) => {
-    const party = GameStateStore.getParty();
+    // TODO: Implement party repository in new architecture
+    // For now, return empty party state
+    const party = { inParty: false, isLeader: false, members: [] };
 
     res.json({
         success: true,
@@ -83,9 +83,10 @@ router.post('/invite', (req: Request, res: Response) => {
  * Leave current party.
  */
 router.post('/leave', (req: Request, res: Response) => {
-    const party = GameStateStore.getParty();
+    // TODO: Implement party repository in new architecture
+    const inParty = false; // Placeholder
 
-    if (!party.inParty) {
+    if (!inParty) {
         res.status(400).json({
             success: false,
             error: {

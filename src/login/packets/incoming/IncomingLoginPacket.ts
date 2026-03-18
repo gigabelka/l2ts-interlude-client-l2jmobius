@@ -71,4 +71,86 @@ export class PacketReader {
   ensureAvailable(bytes: number): boolean {
     return this.buffer.length - this.offset >= bytes;
   }
+
+  // Methods for IPacketReader compatibility
+  readUInt16LE(): number {
+    return this.readUInt16();
+  }
+
+  readInt16LE(): number {
+    return this.readInt16();
+  }
+
+  readInt32LE(): number {
+    return this.readInt32();
+  }
+
+  readInt64LE(): bigint {
+    if (this.offset + 8 > this.buffer.length) {
+      throw new Error(`PacketReader: not enough data for int64 at offset ${this.offset}`);
+    }
+    const value = this.buffer.readBigInt64LE(this.offset);
+    this.offset += 8;
+    return value;
+  }
+
+  readDouble(): number {
+    if (this.offset + 8 > this.buffer.length) {
+      throw new Error(`PacketReader: not enough data for double at offset ${this.offset}`);
+    }
+    const value = this.buffer.readDoubleLE(this.offset);
+    this.offset += 8;
+    return value;
+  }
+
+  readFloatLE(): number {
+    if (this.offset + 4 > this.buffer.length) {
+      throw new Error(`PacketReader: not enough data for float at offset ${this.offset}`);
+    }
+    const value = this.buffer.readFloatLE(this.offset);
+    this.offset += 4;
+    return value;
+  }
+
+  readStringUTF16(): string {
+    if (this.offset + 2 > this.buffer.length) {
+      throw new Error('PacketReader: not enough data to read UTF-16 string terminator');
+    }
+
+    let endPos = this.offset;
+    while (endPos + 1 < this.buffer.length) {
+      if (this.buffer[endPos] === 0x00 && this.buffer[endPos + 1] === 0x00) {
+        break;
+      }
+      endPos += 2;
+    }
+
+    if (endPos + 1 >= this.buffer.length) {
+      throw new Error('PacketReader: UTF-16 string without terminator');
+    }
+
+    const strBuffer = this.buffer.slice(this.offset, endPos);
+    let result = '';
+
+    try {
+      result = strBuffer.toString('utf16le');
+    } catch (e) {
+      console.warn('UTF-16 decode error:', e);
+    }
+
+    this.offset = endPos + 2;
+    return result;
+  }
+
+  skip(n: number): this {
+    if (this.offset + n > this.buffer.length) {
+      throw new Error(`PacketReader: cannot skip ${n} bytes. Only ${this.buffer.length - this.offset} available`);
+    }
+    this.offset += n;
+    return this;
+  }
+
+  getBuffer(): Buffer {
+    return this.buffer;
+  }
 }

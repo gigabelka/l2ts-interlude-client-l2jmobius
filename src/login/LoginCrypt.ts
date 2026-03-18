@@ -49,10 +49,10 @@ export class LoginCrypt {
 
     // Rolling XOR seed is in the last 8 bytes of the decrypted data
     const rndXor =
-      (raw[size - 8] & 0xFF)        |
-      ((raw[size - 7] & 0xFF) << 8)  |
-      ((raw[size - 6] & 0xFF) << 16) |
-      ((raw[size - 5] & 0xFF) << 24);
+      (raw[size - 8]! & 0xFF)        |
+      ((raw[size - 7]! & 0xFF) << 8)  |
+      ((raw[size - 6]! & 0xFF) << 16) |
+      ((raw[size - 5]! & 0xFF) << 24);
 
     NewCrypt.decXORPass(raw, 0, size, rndXor);
 

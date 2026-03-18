@@ -1,0 +1,451 @@
+import Connection from '../network/Connection';
+import { Logger } from '../logger/Logger';
+import { GamePacketHandler } from './GamePacketHandler';
+import { GameState } from './GameState';
+import type { SessionData } from '../login/types';
+import type { IncomingGamePacket } from './packets/incoming/IncomingGamePacket';
+import { CryptInitPacket } from './packets/incoming/CryptInitPacket';
+import { CharSelectedPacket } from './packets/incoming/CharSelectedPacket';
+import { UserInfoPacket } from './packets/incoming/UserInfoPacket';
+import { NetPingRequestPacket } from './packets/incoming/NetPingRequestPacket';
+import { ProtocolVersion } from './packets/outgoing/ProtocolVersion';
+import { CharacterSelected } from './packets/outgoing/CharacterSelected';
+import { AuthRequest } from './packets/outgoing/AuthRequest';
+import { RequestInventoryOpen } from './packets/outgoing/RequestInventoryOpen';
+import { GameCrypt } from './GameCrypt';
+import { CONFIG } from '../config';
+import { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
+import { GameStateStore } from '../core/GameStateStore';
+import { EventBus } from '../core/EventBus';
+import { GameCommandManager } from './GameCommandManager';
+import { InventoryService } from '../services/InventoryService';
+
+/**
+ * @fileoverview GameClient - Game Server connection client
+ * 
+ * Manages the connection to the Lineage 2 Game Server using a Finite State Machine (FSM).
+ * Handles the full login flow from initial connection to entering the game world.
+ * 
+ * Connection Flow:
+ * ```
+ * IDLE → CONNECTING → WAIT_CRYPT_INIT → WAIT_CHAR_LIST → 
+ * WAIT_CHAR_SELECTED → WAIT_USER_INFO → IN_GAME
+ * ```
+ * 
+ * Key responsibilities:
+ * - TCP connection to Game Server
+ * - XOR encryption/decryption of packets
+ * - Character selection and world entry
+ * - Ping/pong keepalive handling
+ * - State management via GameStateStore
+ * - Event emission via EventBus
+ * 
+ * @module game/GameClient
+ * @example
+ * ```typescript
+ * const session: SessionData = {
+ *   gameServerIp: '192.168.1.100',
+ *   gameServerPort: 7777,
+ *   loginOk: [0x01, 0x02, 0x03, 0x04],
+ *   playOk: [0x05, 0x06, 0x07, 0x08]
+ * };
+ * 
+ * const client = new GameClient(session);
+ * client.start();
+ * ```
+ */
+
+/**
+ * Game Server connection client with FSM-based state management.
+ * 
+ * Implements the Game Server protocol including:
+ * - Protocol version exchange
+ * - Authentication with session keys
+ * - Character selection
+ * - World entry sequence
+ * - Keepalive ping/pong
+ * 
+ * @class GameClient
+ * @extends Connection
+ */
+export class GameClient extends Connection {
+    /** Current FSM state */
+    private state: GameState = GameState.IDLE;
+    /** XOR encryption/decryption engine */
+    private crypt: GameCrypt = new GameCrypt();
+    /** Incoming packet handler/dispatcher */
+    private handler: GamePacketHandler = new GamePacketHandler();
+
+    /**
+     * Create a new GameClient.
+     * 
+     * @param {SessionData} session - Session data from Login Server including:
+     *   - gameServerIp: Game Server IP address
+     *   - gameServerPort: Game Server port
+     *   - loginOk: Login OK session key (4 bytes)
+     *   - playOk: Play OK session key (4 bytes)
+     */
+    constructor(
+        private session: SessionData,
+    ) {
+        super();
+    }
+
+    /**
+     * Start the connection process to the Game Server.
+     * 
+     * Initiates TCP connection and begins the FSM flow.
+     * Also initializes services and registers with command manager.
+     * 
+     * @example
+     * ```typescript
+     * const client = new GameClient(session);
+     * client.start();
+     * ```
+     */
+    start(): void {
+        Logger.logState(this.state, GameState.CONNECTING);
+        Logger.info('GameClient', `Connecting to Game Server: ${this.session.gameServerIp}:${this.session.gameServerPort}`);
+        this.state = GameState.CONNECTING;
+        
+        // Initialize services
+        InventoryService.initialize();
+        
+        // Register with command manager
+        GameCommandManager.setGameClient(this);
+        
+        // Update connection state
+        GameStateStore.updateConnection({
+            phase: 'GAME_CONNECTING',
+            gameServer: { 
+                connected: false, 
+                host: this.session.gameServerIp, 
+                port: this.session.gameServerPort 
+            }
+        });
+        
+        this.connect(this.session.gameServerIp, this.session.gameServerPort);
+    }
+
+    /**
+     * Handle successful TCP connection.
+     * 
+     * Sends ProtocolVersion packet to initiate handshake.
+     * @protected
+     */
+    protected onConnect(): void {
+        Logger.info('GameClient', 'Connected to Game Server');
+        Logger.logState(this.state, GameState.WAIT_CRYPT_INIT);
+        this.state = GameState.WAIT_CRYPT_INIT;
+        
+        const pv = new ProtocolVersion();
+        this.sendPacketRawBuffer(pv.encode());
+    }
+
+    /**
+     * Handle TCP connection closure.
+     * 
+     * Cleans up state, unregisters from command manager,
+     * and emits disconnected event.
+     * @protected
+     */
+    protected onClose(): void {
+        Logger.info('GameClient', '*** GAME SERVER CONNECTION CLOSED ***');
+        
+        // Unregister from command manager
+        GameCommandManager.setGameClient(null);
+        
+        // Clear character-specific state (skills, inventory, etc.)
+        GameStateStore.clearSkills();
+        GameStateStore.clearInventory();
+        
+        GameStateStore.updateConnection({
+            phase: 'DISCONNECTED',
+            gameServer: { connected: false, host: '', port: 0 }
+        });
+        
+        EventBus.emitEvent({
+            type: 'system.disconnected',
+            channel: 'system',
+            data: {
+                reason: 'Connection closed',
+                phase: 'DISCONNECTED',
+                willReconnect: false
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    /**
+     * Handle TCP connection error.
+     * 
+     * Updates state and emits error event.
+     * @protected
+     * @param {Error} err - Error object
+     */
+    protected onError(err: Error): void {
+        Logger.error('GameClient', `*** GAME SERVER ERROR: ${err.message} ***`);
+        this.state = GameState.ERROR;
+        
+        GameStateStore.updateConnection({
+            phase: 'ERROR'
+        });
+        
+        EventBus.emitEvent({
+            type: 'system.error',
+            channel: 'system',
+            data: {
+                code: 'GAME_CONNECTION_ERROR',
+                message: err.message
+            },
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    /**
+     * Handle raw packet received from server.
+     * 
+     * Decrypts the packet body, parses it, and dispatches to appropriate handler.
+     * Also emits raw_packet event for debugging/monitoring.
+     * 
+     * @protected
+     * @param {Buffer} fullPacket - Complete packet including 2-byte length header
+     */
+    protected onRawPacket(fullPacket: Buffer): void {
+        const encryptedBody = fullPacket.subarray(2);
+        const body = this.crypt.decrypt(encryptedBody);
+        
+        const opcode = body[0]!;
+        Logger.logPacket('RECV', opcode, fullPacket);
+        Logger.debug('GameClient', `[state=${this.state}] opcode=0x${opcode.toString(16).padStart(2, '0')} bodyLen=${body.length}`);
+
+        Logger.hexDump('RECV DECRYPTED', body, Math.min(body.length, 64));
+
+        // Emit raw packet event for WebSocket - ALL PACKETS go to dashboard
+        EventBus.emitEvent({
+            type: 'system.raw_packet',
+            channel: 'system',
+            data: {
+                opcode: opcode,
+                opcodeHex: `0x${opcode.toString(16).padStart(2, '0')}`,
+                length: body.length,
+                state: this.state
+            },
+            timestamp: new Date().toISOString()
+        });
+
+        const packet = this.handler.handle(opcode!, body, this.state);
+
+        if (packet !== null) {
+            Logger.debug('GameClient', `Handled packet opcode=0x${opcode!.toString(16).padStart(2, '0')} in state=${this.state}`);
+            this.handlePacket(packet, opcode);
+        } else {
+            Logger.warn('GameClient', `Unknown opcode=0x${opcode!.toString(16).padStart(2, '0')}, bodyLen=${body.length}`);
+        }
+    }
+
+    /**
+     * Process a parsed packet based on current FSM state.
+     * 
+     * Handles state-specific packet processing:
+     * - WAIT_CRYPT_INIT: Process CryptInit, initialize crypto
+     * - WAIT_CHAR_LIST: Process CharSelectInfo, select character
+     * - WAIT_CHAR_SELECTED: Process CharSelected confirmation
+     * - WAIT_USER_INFO: Process UserInfo, enter game world
+     * - IN_GAME: Process game packets (ping, etc.)
+     * 
+     * @private
+     * @param {IncomingGamePacket} packet - Parsed packet object
+     * @param {number} opcode - Packet opcode
+     */
+    private handlePacket(packet: IncomingGamePacket, opcode: number): void {
+        switch (this.state) {
+            case GameState.WAIT_CRYPT_INIT: {
+                if (opcode !== 0x00 && opcode !== 0x2D) {
+                    Logger.warn('GameClient', `Expected CryptInit, got 0x${opcode.toString(16)}`);
+                    return;
+                }
+                const p = packet as CryptInitPacket;
+                if (p.result !== 1) {
+                    Logger.error('GameClient', `ProtocolVersion rejected by server! result=${p.result}`);
+                    return;
+                }
+
+                // Initialize crypto
+                this.crypt.initKey(p.xorKeyData, p.useEncryption);
+                Logger.info('GameCrypt', `XOR keys initialized. Encryption will be used: ${p.useEncryption}`);
+
+                Logger.info('GameClient', 'Sending AuthLogin (0x08)...');
+                this.sendPacket(new AuthRequest(this.session, CONFIG.Username));
+
+                Logger.logState(this.state, GameState.WAIT_CHAR_LIST);
+                this.state = GameState.WAIT_CHAR_LIST;
+                return;
+            }
+
+            case GameState.WAIT_CHAR_LIST: {
+                if (opcode === 0x04 || opcode === 0x13 || opcode === 0x2C) {
+                    const charInfo = packet as import('./packets/incoming/CharSelectInfoPacket').CharSelectInfoPacket;
+                    Logger.info('GameClient', `CharSelectInfo received: ${charInfo.charCount} character(s)`);
+                    
+                    // Select character
+                    Logger.info('GameClient', `Sending CharacterSelect for slot ${CONFIG.CharSlotIndex}...`);
+                    this.sendPacket(new CharacterSelected(CONFIG.CharSlotIndex));
+                    
+                    Logger.logState(this.state, GameState.WAIT_CHAR_SELECTED);
+                    this.state = GameState.WAIT_CHAR_SELECTED;
+                }
+                return;
+            }
+
+            case GameState.WAIT_CHAR_SELECTED: {
+                if (opcode === 0x15) {
+                    Logger.info('GameClient', 'CharSelected confirmation received');
+                    this.handleCharSelected(packet as CharSelectedPacket);
+                    return;
+                }
+                return;
+            }
+
+            case GameState.WAIT_USER_INFO: {
+                if (opcode === 0x04) {
+                    const p = packet as UserInfoPacket;
+                    Logger.info('GameClient', `ENTERED GAME WORLD AS: ${p.name}`);
+                    Logger.logState(this.state, GameState.IN_GAME);
+                    this.state = GameState.IN_GAME;
+                    
+                    // Update GameStateStore with character info
+                    GameStateStore.updateCharacter({
+                        objectId: p.objectId,
+                        name: p.name,
+                        level: p.level,
+                        position: { x: p.x, y: p.y, z: p.z }
+                    });
+                    
+                    GameStateStore.updateConnection({
+                        phase: 'IN_GAME',
+                        gameServer: { 
+                            connected: true, 
+                            host: this.session.gameServerIp, 
+                            port: this.session.gameServerPort 
+                        }
+                    });
+                    
+                    // Emit connected event
+                    EventBus.emitEvent({
+                        type: 'system.connected',
+                        channel: 'system',
+                        data: {
+                            phase: 'IN_GAME',
+                            characterName: p.name,
+                            serverId: CONFIG.ServerId
+                        },
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Emit position changed event
+                    EventBus.emitEvent({
+                        type: 'movement.position_changed',
+                        channel: 'movement',
+                        data: {
+                            objectId: p.objectId,
+                            position: { x: p.x, y: p.y, z: p.z },
+                            speed: 0,
+                            isRunning: false
+                        },
+                        timestamp: new Date().toISOString()
+                    });
+                    
+                    // Request inventory after entering world
+                    Logger.info('GameClient', 'Requesting inventory...');
+                    this.sendPacket(new RequestInventoryOpen());
+                    
+                    // Retry inventory request after 3 seconds if empty
+                    setTimeout(() => {
+                        const inv = GameStateStore.getInventory();
+                        if (!inv.items || inv.items.length === 0) {
+                            Logger.info('GameClient', 'Inventory empty, retrying request...');
+                            this.sendPacket(new RequestInventoryOpen());
+                        }
+                    }, 3000);
+                }
+                break;
+            }
+
+            case GameState.IN_GAME: {
+                // Handle ping
+                if (opcode === 0xD3) {
+                    const p = packet as NetPingRequestPacket;
+                    Logger.debug('GameClient', `pingId=${p.pingId} -> Pong`);
+                    this.sendPacketRawBuffer(Buffer.from([0xA8, p.pingId]));
+                }
+                
+                // All other packets are handled in their respective decode methods
+                // which emit events to EventBus -> WebSocket
+                break;
+            }
+
+            default:
+                Logger.warn('GameClient', `Packet in state ${this.state}, opcode=0x${opcode.toString(16)}`);
+        }
+    }
+
+    /**
+     * Handle CharSelected packet and send EnterWorld sequence.
+     * 
+     * The EnterWorld sequence consists of three packets:
+     * 1. 0x9D (empty)
+     * 2. 0xD0 0x08 0x00 (extended opcode)
+     * 3. 0x03 with 104 bytes padding (EnterWorld)
+     * 
+     * @private
+     * @param {CharSelectedPacket} p - CharSelected packet data
+     */
+    private handleCharSelected(p: CharSelectedPacket): void {
+        Logger.info('GameClient', `CharSelected: ${p.charName}  id=${p.charId}`);
+        Logger.logState(this.state, GameState.WAIT_USER_INFO);
+        this.state = GameState.WAIT_USER_INFO;
+
+        // Send EnterWorld sequence (three packets from Wireshark capture)
+        // Part 1: 0x9D (empty)
+        this.sendPacketRawBuffer(Buffer.from([0x9D]));
+
+        // Part 2: 0xD0 0x08 0x00
+        this.sendPacketRawBuffer(Buffer.from([0xD0, 0x08, 0x00]));
+
+        // Part 3: EnterWorld (0x03) with 104 bytes padding
+        const enterWorldPayload = Buffer.alloc(105, 0);
+        enterWorldPayload[0] = 0x03;
+        this.sendPacketRawBuffer(enterWorldPayload);
+    }
+
+    /**
+     * Send a game packet with encryption.
+     * 
+     * @param {OutgoingGamePacket} packet - Packet to send
+     * @example
+     * ```typescript
+     * client.sendPacket(new AttackRequest(targetId));
+     * ```
+     */
+    sendPacket(packet: OutgoingGamePacket): void {
+        const body = packet.encode();
+        const encrypted = this.crypt.encrypt(body);
+        this.sendPacketRawBuffer(encrypted);
+    }
+
+    /**
+     * Send raw buffer with L2 length prefix.
+     * 
+     * @private
+     * @param {Buffer} buffer - Raw packet data (including opcode)
+     */
+    private sendPacketRawBuffer(buffer: Buffer): void {
+        Logger.debug('GameClient', `-> Buffer len=${buffer.length}`);
+        const totalLen = buffer.length + 2;
+        const out = Buffer.allocUnsafe(totalLen);
+        out.writeUInt16LE(totalLen, 0);
+        buffer.copy(out, 2);
+        this.sendRaw(out);
+    }
+}
