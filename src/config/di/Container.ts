@@ -210,8 +210,13 @@ export const DI_TOKENS = {
     StateMachine: Symbol('StateMachine'),
     PacketFactory: Symbol('PacketFactory'),
     PacketProcessor: Symbol('PacketProcessor'),
+    PacketSerializer: Symbol('PacketSerializer'),
 
     // Services
     CharacterService: Symbol('CharacterService'),
     CombatService: Symbol('CombatService'),
+    GameDataService: Symbol('GameDataService'),
+
+    // Cache
+    CacheManager: Symbol('CacheManager'),
 } as const;

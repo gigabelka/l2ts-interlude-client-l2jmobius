@@ -11,6 +11,7 @@ import type { ICharacterRepository, IWorldRepository, IInventoryRepository, ICon
 import { ConnectionPhase } from '../../domain/repositories/IConnectionRepository';
 import type { IEventBus, IPacketProcessor } from '../../application/ports';
 import type { ISystemEventBus } from '../../infrastructure/event-bus';
+import type { PacketSerializer } from '../../infrastructure/network/PacketSerializer';
 import Connection from '../../network/Connection';
 
 // Repository accessors
@@ -22,6 +23,7 @@ const getEventBus = () => container.resolve<IEventBus>(DI_TOKENS.EventBus).getOr
 const getSystemEventBus = () => container.resolve<ISystemEventBus>(DI_TOKENS.SystemEventBus).getOrThrow();
 const getPacketProcessor = () => container.resolve<IPacketProcessor>(DI_TOKENS.PacketProcessor).getOrThrow();
 const getConnectionRepo = () => container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
+const getPacketSerializer = () => container.resolve<PacketSerializer>(DI_TOKENS.PacketSerializer).getOrThrow();
 
 const router = Router();
 
@@ -79,6 +81,7 @@ function createGameSession(overrideConfig?: Partial<LoginConfig>): void {
                 inventoryRepo: getInventoryRepo(),
                 connectionRepo,
                 commandManager: GameCommandManager,
+                packetSerializer: getPacketSerializer(),
             }, connection);
             activeGameClient.start();
         },

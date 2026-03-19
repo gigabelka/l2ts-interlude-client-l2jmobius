@@ -11,6 +11,7 @@ import { GameCrypt } from './GameCrypt';
 import { CONFIG } from '../config';
 import { Result } from '../shared/result';
 import type { INetworkConnection } from '../network/INetworkConnection';
+import { PacketSerializer, globalPacketSerializer } from '../infrastructure/network/PacketSerializer';
 
 // New Architecture imports
 import type { IEventBus, IPacketProcessor } from '../application/ports';
@@ -43,6 +44,7 @@ export interface GameClientDependencies {
     inventoryRepo: IInventoryRepository;
     connectionRepo: IConnectionRepository;
     commandManager: GameCommandManagerClass;
+    packetSerializer?: PacketSerializer; // Опционально: сериализатор с pooling
 }
 
 /**
@@ -55,12 +57,15 @@ export class GameClientNew implements IGameClient {
     private deps: GameClientDependencies;
     private inventoryRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    private packetSerializer: PacketSerializer;
+
     constructor(
         private session: SessionData,
         deps: GameClientDependencies,
         private connection: INetworkConnection // Инъекция зависимости через композицию
     ) {
         this.deps = deps;
+        this.packetSerializer = deps.packetSerializer ?? globalPacketSerializer;
         this.setupConnectionEvents();
     }
 
@@ -289,7 +294,13 @@ export class GameClientNew implements IGameClient {
         try {
             const body = packet.encode();
             const encrypted = this.crypt.encrypt(body);
-            this.sendPacketRawBuffer(encrypted);
+
+            const { buffer, cleanup } = this.packetSerializer.serializeRawWithHeader(encrypted);
+            this.connection.send(buffer);
+
+            // Release buffer back to pool after send
+            setImmediate(cleanup);
+
             return Result.ok(undefined);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -300,11 +311,12 @@ export class GameClientNew implements IGameClient {
 
     private sendPacketRawBuffer(buffer: Buffer): void {
         Logger.debug('GameClient', `-> Buffer len=${buffer.length}`);
-        const totalLen = buffer.length + 2;
-        const out = Buffer.allocUnsafe(totalLen);
-        out.writeUInt16LE(totalLen, 0);
-        buffer.copy(out, 2);
-        this.connection.send(out);
+
+        const { buffer: framedBuffer, cleanup } = this.packetSerializer.serializeRawWithHeader(buffer);
+        this.connection.send(framedBuffer);
+
+        // Release buffer back to pool
+        setImmediate(cleanup);
     }
 
     /**

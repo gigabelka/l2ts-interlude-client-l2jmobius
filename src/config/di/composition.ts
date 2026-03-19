@@ -6,6 +6,13 @@
 
 import { Container, DI_TOKENS } from './Container';
 
+// Cache
+import { ICacheManager } from '../../infrastructure/cache/ICacheManager';
+import { InMemoryCacheManager } from '../../infrastructure/cache/InMemoryCacheManager';
+
+// Services
+import { GameDataService } from '../../services/GameDataService';
+
 // Domain & Application
 import type {
     ICharacterRepository,
@@ -35,6 +42,7 @@ import {
     configurePacketFactory,
     configurePacketProcessor,
 } from '../../infrastructure/protocol';
+import { globalPacketSerializer } from '../../infrastructure/network/PacketSerializer';
 
 /**
  * Создать и настроить DI контейнер
@@ -81,6 +89,25 @@ export function createContainer(): Container {
     );
 
     // ============================================================================
+    // Cache Manager (Singleton)
+    // ============================================================================
+
+    const cacheManager = new InMemoryCacheManager();
+    container.registerInstance<ICacheManager>(
+        DI_TOKENS.CacheManager,
+        cacheManager
+    );
+
+    // ============================================================================
+    // Game Data Service (Singleton) - кэшированный доступ к игровым данным
+    // ============================================================================
+
+    container.registerInstance(
+        DI_TOKENS.GameDataService,
+        new GameDataService(cacheManager)
+    );
+
+    // ============================================================================
     // State Machine (Transient - новая для каждого клиента)
     // ============================================================================
 
@@ -98,6 +125,15 @@ export function createContainer(): Container {
     container.registerInstance<IIncomingPacketFactory>(
         DI_TOKENS.PacketFactory,
         packetFactory
+    );
+
+    // ============================================================================
+    // Packet Serializer (Singleton) - с пулом буферов для оптимизации
+    // ============================================================================
+
+    container.registerInstance(
+        DI_TOKENS.PacketSerializer,
+        globalPacketSerializer
     );
 
     // ============================================================================

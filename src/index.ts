@@ -12,6 +12,7 @@ import { DI_TOKENS } from './config/di/Container';
 import type { IEventBus, IPacketProcessor } from './application/ports';
 import type { ISystemEventBus } from './infrastructure/event-bus';
 import type { ICharacterRepository, IWorldRepository, IInventoryRepository, IConnectionRepository } from './domain/repositories';
+import type { PacketSerializer } from './infrastructure/network/PacketSerializer';
 
 // Game
 import { GameClientNew } from './game/GameClient';
@@ -110,6 +111,9 @@ function onLoginComplete(session: SessionData): void {
         eventBus,
     });
 
+    // Получаем сериализатор пакетов из DI
+    const packetSerializer = container.resolve<PacketSerializer>(DI_TOKENS.PacketSerializer).getOrThrow();
+
     // Запускаем Game Client
     const connection = new Connection();
     const gameClient = new GameClientNew(session, {
@@ -121,6 +125,7 @@ function onLoginComplete(session: SessionData): void {
         inventoryRepo: invRepo,
         connectionRepo,
         commandManager,
+        packetSerializer,
     }, connection);
     gameClient.start();
 }
