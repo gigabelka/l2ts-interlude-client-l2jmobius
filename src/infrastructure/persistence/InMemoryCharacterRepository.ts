@@ -85,7 +85,5 @@ export class InMemoryCharacterRepository implements ICharacterRepository {
     }
 }
 
-/**
- * Singleton instance для convenience
- */
-export const characterRepository = new InMemoryCharacterRepository();
+// Singleton exports удалены - используйте DI контейнер для получения инстансов
+// Пример: container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository)

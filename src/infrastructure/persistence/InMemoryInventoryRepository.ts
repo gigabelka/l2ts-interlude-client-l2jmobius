@@ -151,7 +151,5 @@ export class InMemoryInventoryRepository implements IInventoryRepository {
     }
 }
 
-/**
- * Singleton instance
- */
-export const inventoryRepository = new InMemoryInventoryRepository();
+// Singleton exports удалены - используйте DI контейнер для получения инстансов
+// Пример: container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository)

@@ -65,7 +65,5 @@ export class InMemoryConnectionRepository implements IConnectionRepository {
     }
 }
 
-/**
- * Singleton instance для удобства (хотя лучше через DI)
- */
-export const connectionRepository = new InMemoryConnectionRepository();
+// Singleton exports удалены - используйте DI контейнер для получения инстансов
+// Пример: container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository)

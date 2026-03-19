@@ -4,7 +4,7 @@ import { PacketWriter } from '../../../src/network/PacketWriter';
 import { SimpleEventBus } from '../../../src/infrastructure/event-bus';
 import { InMemoryCharacterRepository, InMemoryWorldRepository } from '../../../src/infrastructure/persistence';
 import { UserInfoHandler, NpcInfoHandler, CharInfoHandler } from '../../../src/infrastructure/protocol/game/handlers';
-import { Position } from '../../../src/domain/value-objects';
+import { Position, Vitals, BaseStats, CombatStats } from '../../../src/domain/value-objects';
 import { Npc, Character } from '../../../src/domain/entities';
 
 describe('Packet Handlers', () => {
@@ -62,11 +62,11 @@ describe('Packet Handlers', () => {
                 sex: 0,
                 title: '',
                 position: Position.zero(),
-                hp: { current: 100, max: 100 },
-                mp: { current: 100, max: 100 },
-                cp: { current: 0, max: 0 },
-                baseStats: { str: 10, dex: 10, con: 10, int: 10, wit: 10, men: 10 },
-                combatStats: {},
+                hp: Vitals.create({ current: 100, max: 100 }).getOrElse(Vitals.zero()),
+                mp: Vitals.create({ current: 100, max: 100 }).getOrElse(Vitals.zero()),
+                cp: Vitals.create({ current: 0, max: 0 }).getOrElse(Vitals.zero()),
+                baseStats: BaseStats.create({ str: 10, dex: 10, con: 10, int: 10, wit: 10, men: 10 }),
+                combatStats: CombatStats.create({}),
                 skills: [],
                 isInCombat: false,
             } as any));

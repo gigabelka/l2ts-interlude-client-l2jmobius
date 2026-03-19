@@ -14,6 +14,7 @@ import { CONFIG } from '../config';
 // New Architecture imports
 import type { IEventBus, IPacketProcessor } from '../application/ports';
 import type { ICharacterRepository, IWorldRepository, IInventoryRepository } from '../domain/repositories';
+import type { ISystemEventBus } from '../infrastructure/event-bus';
 
 import { CharacterEnteredGameEvent, ConnectionPhaseChangedEvent } from '../domain/events';
 import { IConnectionRepository, ConnectionPhase } from '../domain';
@@ -33,7 +34,8 @@ import type { IGameClient } from './IGameClient';
  * Dependencies for GameClient
  */
 export interface GameClientDependencies {
-    eventBus: IEventBus;
+    eventBus: IEventBus;           // Domain events для бизнес-логики
+    systemEventBus: ISystemEventBus; // System events для мониторинга
     packetProcessor: IPacketProcessor;
     characterRepo: ICharacterRepository;
     worldRepo: IWorldRepository;
@@ -290,9 +292,9 @@ export class GameClientNew extends Connection implements IGameClient {
     }
 
     private publishRawPacketEvent(opcode: number, length: number): void {
-        this.deps.eventBus.publish({
+        this.deps.systemEventBus.publish({
             type: 'system.raw_packet',
-            channel: 'system',
+            channel: 'network',
             payload: {
                 opcode,
                 opcodeHex: `0x${opcode.toString(16).padStart(2, '0')}`,
@@ -319,7 +321,7 @@ export class GameClientNew extends Connection implements IGameClient {
     }
 
     private publishDisconnectedEvent(): void {
-        this.deps.eventBus.publish({
+        this.deps.systemEventBus.publish({
             type: 'system.disconnected',
             channel: 'system',
             payload: {
@@ -332,7 +334,7 @@ export class GameClientNew extends Connection implements IGameClient {
     }
 
     private publishErrorEvent(message: string): void {
-        this.deps.eventBus.publish({
+        this.deps.systemEventBus.publish({
             type: 'system.error',
             channel: 'system',
             payload: {

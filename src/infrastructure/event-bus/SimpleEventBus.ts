@@ -96,7 +96,5 @@ export class SimpleEventBus implements IEventBus {
     }
 }
 
-/**
- * Singleton instance
- */
-export const eventBus = new SimpleEventBus();
+// Singleton exports удалены - используйте DI контейнер для получения инстансов
+// Пример: container.resolve<IEventBus>(DI_TOKENS.EventBus)

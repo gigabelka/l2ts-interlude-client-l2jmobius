@@ -1,4 +1,4 @@
-export { InMemoryCharacterRepository, characterRepository } from './InMemoryCharacterRepository';
-export { InMemoryWorldRepository, worldRepository } from './InMemoryWorldRepository';
-export { InMemoryInventoryRepository, inventoryRepository } from './InMemoryInventoryRepository';
-export { InMemoryConnectionRepository, connectionRepository } from './InMemoryConnectionRepository';
+export { InMemoryCharacterRepository } from './InMemoryCharacterRepository';
+export { InMemoryWorldRepository } from './InMemoryWorldRepository';
+export { InMemoryInventoryRepository } from './InMemoryInventoryRepository';
+export { InMemoryConnectionRepository } from './InMemoryConnectionRepository';

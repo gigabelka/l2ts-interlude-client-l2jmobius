@@ -27,7 +27,7 @@ import {
     InMemoryInventoryRepository,
     InMemoryConnectionRepository,
 } from '../../infrastructure/persistence';
-import { SimpleEventBus } from '../../infrastructure/event-bus';
+import { SimpleEventBus, SystemEventBus } from '../../infrastructure/event-bus';
 import {
     createGameStateMachine,
     GameIncomingPacketFactory,
@@ -67,12 +67,17 @@ export function createContainer(): Container {
     );
 
     // ============================================================================
-    // Event Bus (Singleton - единая шина событий)
+    // Event Buses (Singleton - единая шина для доменных и системных событий)
     // ============================================================================
 
     container.registerInstance<IEventBus>(
         DI_TOKENS.EventBus,
         new SimpleEventBus()
+    );
+
+    container.registerInstance(
+        DI_TOKENS.SystemEventBus,
+        new SystemEventBus()
     );
 
     // ============================================================================

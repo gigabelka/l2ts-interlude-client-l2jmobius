@@ -10,6 +10,7 @@ import { Logger } from './logger/Logger';
 import { getContainer } from './config/di/appContainer';
 import { DI_TOKENS } from './config/di/Container';
 import type { IEventBus, IPacketProcessor } from './application/ports';
+import type { ISystemEventBus } from './infrastructure/event-bus';
 import type { ICharacterRepository, IWorldRepository, IInventoryRepository, IConnectionRepository } from './domain/repositories';
 
 // Game
@@ -94,6 +95,7 @@ function onLoginComplete(session: SessionData): void {
     // Получаем зависимости из контейнера
     const container = getContainer();
     const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+    const systemEventBus = container.resolve<ISystemEventBus>(DI_TOKENS.SystemEventBus).getOrThrow();
     const packetProcessor = container.resolve<IPacketProcessor>(DI_TOKENS.PacketProcessor).getOrThrow();
     const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
     const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
@@ -110,6 +112,7 @@ function onLoginComplete(session: SessionData): void {
     // Запускаем Game Client
     const gameClient = new GameClientNew(session, {
         eventBus,
+        systemEventBus,
         packetProcessor,
         characterRepo: charRepo,
         worldRepo,

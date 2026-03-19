@@ -6,14 +6,11 @@ export {
     InMemoryWorldRepository,
     InMemoryInventoryRepository,
     InMemoryConnectionRepository,
-    characterRepository,
-    worldRepository,
-    inventoryRepository,
-    connectionRepository,
 } from './persistence';
 
 // Event Bus
-export { SimpleEventBus, eventBus } from './event-bus';
+export { SimpleEventBus, SystemEventBus } from './event-bus';
+export type { ISystemEventBus, SystemEvent, SystemEventHandler } from './event-bus';
 
 // Protocol
 export {

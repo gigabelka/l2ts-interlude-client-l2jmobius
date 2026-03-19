@@ -65,6 +65,7 @@ export interface CharacterJSON {
  */
 export class Character {
     private uncommittedEvents: DomainEvent[] = [];
+    private _snapshot: CharacterJSON | null = null;
 
     constructor(
         readonly objectId: ObjectId,
@@ -153,6 +154,7 @@ export class Character {
     updatePosition(newPosition: Position, speed: number = 0, isRunning: boolean = true): void {
         const previousPosition = this.data.position;
         this.data.position = newPosition;
+        this.invalidateSnapshot();
 
         this.uncommittedEvents.push(
             new CharacterPositionChangedEvent(
@@ -168,6 +170,7 @@ export class Character {
     updateHp(current: number, max: number): void {
         const previousHp = this.data.hp.current;
         this.data.hp = new Vitals({ current, max });
+        this.invalidateSnapshot();
 
         if (current !== previousHp) {
             this.uncommittedEvents.push(
@@ -182,6 +185,7 @@ export class Character {
     updateMp(current: number, max: number): void {
         const previousMp = this.data.mp.current;
         this.data.mp = new Vitals({ current, max });
+        this.invalidateSnapshot();
 
         if (current !== previousMp) {
             this.uncommittedEvents.push(
@@ -196,6 +200,7 @@ export class Character {
     updateCp(current: number, max: number): void {
         const previousCp = this.data.cp.current;
         this.data.cp = new Vitals({ current, max });
+        this.invalidateSnapshot();
 
         if (current !== previousCp) {
             this.uncommittedEvents.push(
@@ -210,6 +215,7 @@ export class Character {
     setTarget(targetId?: number, targetName?: string, targetType?: 'NPC' | 'PLAYER'): void {
         const previousTargetId = this.data.targetId;
         this.data.targetId = targetId;
+        this.invalidateSnapshot();
 
         this.uncommittedEvents.push(
             new CharacterTargetChangedEvent(
@@ -234,6 +240,7 @@ export class Character {
     addExp(amount: number): void {
         const oldLevel = this.data.level;
         this.data.exp += amount;
+        this.invalidateSnapshot();
 
         // Проверяем повышение уровня
         const expObj = Experience.create(this.data.level, this.data.exp, this.data.sp);
@@ -254,6 +261,7 @@ export class Character {
      */
     addSp(amount: number): void {
         this.data.sp += amount;
+        this.invalidateSnapshot();
     }
 
     /**
@@ -261,6 +269,7 @@ export class Character {
      */
     updateSkills(skills: SkillInfo[]): void {
         this.data.skills = [...skills];
+        this.invalidateSnapshot();
     }
 
     /**
@@ -268,17 +277,24 @@ export class Character {
      */
     setInCombat(inCombat: boolean): void {
         this.data.isInCombat = inCombat;
+        this.invalidateSnapshot();
     }
 
     /**
      * Обновить характеристики
      */
     updateStats(stats: Partial<CharacterData>): void {
+        let changed = false;
         if (stats.baseStats) {
             this.data.baseStats = stats.baseStats;
+            changed = true;
         }
         if (stats.combatStats) {
             this.data.combatStats = stats.combatStats;
+            changed = true;
+        }
+        if (changed) {
+            this.invalidateSnapshot();
         }
     }
 
@@ -289,6 +305,7 @@ export class Character {
         if (this.data.level !== newLevel) {
             const oldLevel = this.data.level;
             this.data.level = newLevel;
+            this.invalidateSnapshot();
             this.uncommittedEvents.push(
                 new CharacterLevelUpEvent(
                     { oldLevel, newLevel, exp: this.data.exp, sp: this.data.sp },
@@ -384,12 +401,58 @@ export class Character {
 
     /**
      * Клонировать персонажа с сохранением незакоммиченных событий
+     * Использует copy-on-write для оптимизации производительности
      */
     clone(): Character {
-        const cloned = new Character(this.objectId, this.data);
-        // Копируем события
+        // Copy-on-write: используем snapshot для быстрого клонирования
+        if (!this._snapshot) {
+            this._snapshot = this.toJSON();
+        }
+
+        const cloned = Character.fromJSON(this._snapshot);
         cloned.uncommittedEvents = [...this.uncommittedEvents];
         return cloned;
+    }
+
+    /**
+     * Создать персонажа из JSON (для клонирования и сериализации)
+     */
+    static fromJSON(data: CharacterJSON): Character {
+        const position = Position.at(data.position.x, data.position.y, data.position.z, data.position.heading);
+        const hp = Vitals.create({ current: data.hp.current, max: data.hp.max }).getOrElse(Vitals.zero());
+        const mp = Vitals.create({ current: data.mp.current, max: data.mp.max }).getOrElse(Vitals.zero());
+        const cp = Vitals.create({ current: data.cp.current, max: data.cp.max }).getOrElse(Vitals.zero());
+        const baseStats = BaseStats.create(data.baseStats);
+        const combatStats = CombatStats.create(data.combatStats);
+
+        const fullData: CharacterData = {
+            objectId: data.objectId,
+            name: data.name,
+            title: data.title,
+            level: data.level,
+            exp: data.exp,
+            sp: data.sp,
+            classId: data.classId,
+            raceId: data.raceId,
+            sex: data.sex,
+            position,
+            hp,
+            mp,
+            cp,
+            baseStats,
+            combatStats,
+            skills: data.skills,
+            isInCombat: data.isInCombat,
+            targetId: data.targetId,
+        };
+        return new Character(ObjectId.of(data.objectId), fullData);
+    }
+
+    /**
+     * Инвалидировать snapshot при изменении данных
+     */
+    private invalidateSnapshot(): void {
+        this._snapshot = null;
     }
 }
 

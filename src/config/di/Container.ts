@@ -202,12 +202,14 @@ export const DI_TOKENS = {
     InventoryRepository: Symbol('InventoryRepository'),
     ConnectionRepository: Symbol('ConnectionRepository'),
 
+    // Event Buses
+    EventBus: Symbol('EventBus'),           // Domain events
+    SystemEventBus: Symbol('SystemEventBus'), // System events для мониторинга
+
     // Infrastructure
-    EventBus: Symbol('EventBus'),
     StateMachine: Symbol('StateMachine'),
     PacketFactory: Symbol('PacketFactory'),
     PacketProcessor: Symbol('PacketProcessor'),
-
 
     // Services
     CharacterService: Symbol('CharacterService'),

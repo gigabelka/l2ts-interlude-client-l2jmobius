@@ -10,6 +10,7 @@ import { DI_TOKENS } from '../../config/di/Container';
 import type { ICharacterRepository, IWorldRepository, IInventoryRepository, IConnectionRepository } from '../../domain/repositories';
 import { ConnectionPhase } from '../../domain/repositories/IConnectionRepository';
 import type { IEventBus, IPacketProcessor } from '../../application/ports';
+import type { ISystemEventBus } from '../../infrastructure/event-bus';
 
 // Repository accessors
 const container = getContainer();
@@ -17,6 +18,7 @@ const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.Char
 const getWorldRepo = () => container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
 const getInventoryRepo = () => container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
 const getEventBus = () => container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
+const getSystemEventBus = () => container.resolve<ISystemEventBus>(DI_TOKENS.SystemEventBus).getOrThrow();
 const getPacketProcessor = () => container.resolve<IPacketProcessor>(DI_TOKENS.PacketProcessor).getOrThrow();
 const getConnectionRepo = () => container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
 
@@ -68,6 +70,7 @@ function createGameSession(overrideConfig?: Partial<LoginConfig>): void {
             // Create and start GameClient
             activeGameClient = new GameClientNew(session, {
                 eventBus,
+                systemEventBus: getSystemEventBus(),
                 packetProcessor,
                 characterRepo: getCharRepo(),
                 worldRepo: getWorldRepo(),

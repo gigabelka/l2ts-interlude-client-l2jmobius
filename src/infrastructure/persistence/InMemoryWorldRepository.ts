@@ -162,7 +162,5 @@ export class InMemoryWorldRepository implements IWorldRepository {
     }
 }
 
-/**
- * Singleton instance
- */
-export const worldRepository = new InMemoryWorldRepository();
+// Singleton exports удалены - используйте DI контейнер для получения инстансов
+// Пример: container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository)
