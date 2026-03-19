@@ -17,25 +17,69 @@ This is a **headless Lineage 2 client** for L2J Mobius CT_0_Interlude servers. I
 
 ```bash
 npm install       # Install dependencies
-npm run dev       # Run the client
+npm run dev       # Run the client (silent logging)
+npm run debug     # Run with verbose packet logging
 npm run build     # Compile TypeScript to dist/
+npm start         # Run production build
+
+# Testing
+npm test          # Run tests once
+npm run test:watch # Run tests in watch mode
+npm run test:ui   # Run Vitest UI
+npm run test:coverage # Run tests with coverage
+
+# Code Quality
+npm run lint      # Check for linting errors
+npm run lint:fix  # Auto-fix linting errors
+npm run typecheck # Type checking without emit
+
+# Data Export
+npm run export:data # Export game data from L2J Mobius XML to JSON
+
+# Development
+npm run clean     # Remove dist/ folder
 ```
 
 ## Architecture
 
-The client has two distinct connection phases managed by FSM-driven clients:
+The project follows **Clean Architecture** principles with a layered approach:
 
-### Phase 1: Login Server (LoginClient)
+### Clean Architecture Layers
+
+- **Domain Layer** (`domain/`): Business entities, value objects, events, repository interfaces
+- **Application Layer** (`application/`): Application services, use cases, port interfaces
+- **Infrastructure Layer** (`infrastructure/`): Concrete implementations, packet processing, persistence
+- **API Layer** (`api/`): REST endpoints, WebSocket server, middleware
+
+### Dependency Injection
+
+Uses a custom DI container (`config/di/`) with lazy initialization. All dependencies are resolved through the container using DI_TOKENS.
+
+### Two-Phase Connection Model
+
+The client uses FSM-driven clients for both connection phases:
+
+#### Phase 1: Login Server (LoginClient)
 
 - **Flow:** Init → GGAuth → AuthLogin → ServerList → PlayOk → disconnect
 - **Crypto:** Static Blowfish for Init, dynamic Blowfish + XOR for rest, RSA for credentials
 - **State Enum:** `LoginState` (IDLE, CONNECTING, WAIT_INIT, WAIT_GG_AUTH, WAIT_LOGIN_OK, WAIT_SERVER_LIST, WAIT_PLAY_OK, DONE, ERROR)
 
-### Phase 2: Game Server (GameClient)
+#### Phase 2: Game Server (GameClient)
 
 - **Flow:** ProtocolVersion (0x00) → CryptInit (0x00) → AuthRequest (0x08) → CharSelectInfo (0x13) → CharacterSelected (0x0D) → CharSelected (0x15) → (0x9D + 0xD0-08-00 + EnterWorld 0x03) → UserInfo (0x04) → IN_GAME (ping/pong)
 - **Crypto:** Encryption is disabled via flag sent in CryptInit.
 - **State Enum:** `GameState` (IDLE, CONNECTING, WAIT_CRYPT_INIT, WAIT_CHAR_LIST, WAIT_CHAR_SELECTED, WAIT_USER_INFO, IN_GAME, ERROR)
+
+### Event-Driven Architecture
+
+Uses typed EventBus for loose coupling between components. Events are published from packet handlers and consumed by API layers.
+
+### External APIs
+
+- **REST API** (port 3000): HTTP endpoints for character control, combat, movement, inventory
+- **WebSocket API**: Real-time game event streaming with channel-based subscriptions
+- **Dashboard**: Web UI for monitoring client state and manual control
 
 **CRITICAL:** The client strictly mimics the packet layout and padding observed in Wireshark captures to successfully connect.
 
@@ -43,19 +87,38 @@ The client has two distinct connection phases managed by FSM-driven clients:
 
 ```
 src/
-├── index.ts           # Entry point: LoginClient → GameClient pipeline
-├── config.ts          # Server address, credentials, character slot
-├── logger/            # Logging with hex dump utilities
-├── network/           # TCP connection with L2 packet framing
-├── crypto/            # Blowfish, XOR, RSA implementations
-├── login/             # Login server client + packets
+├── index.ts                    # Entry point with DI container bootstrap
+├── config/                     # Configuration and DI container
+├── api/                        # REST API + WebSocket server
+│   ├── routes/                # HTTP endpoints (character, combat, movement)
+│   ├── middleware/            # Authentication, rate limiting
+│   └── ws/                    # WebSocket server
+├── domain/                     # Business logic layer
+│   ├── entities/              # Character, Npc, Item domain entities
+│   ├── value-objects/         # Position, Vitals, Stats immutable objects
+│   ├── events/                # Domain events (typed)
+│   └── repositories/          # Repository interfaces
+├── application/                # Application service layer
+│   └── ports/                 # Interface definitions (IEventBus, etc.)
+├── infrastructure/             # Implementation layer
+│   ├── persistence/           # In-memory repository implementations
+│   ├── event-bus/             # EventBus implementation
+│   ├── protocol/game/         # Packet processing with Factory+Strategy patterns
+│   └── integration/           # Legacy integration adapters
+├── ui/                         # Dashboard UI components
+├── logger/                     # Logging with hex dump utilities
+├── network/                    # TCP connection with L2 packet framing
+├── crypto/                     # Blowfish, XOR, RSA implementations
+├── login/                      # Login server client + packets
 │   ├── LoginClient.ts
 │   ├── LoginCrypt.ts
-│   └── packets/      # incoming/outgoing login packets
-└── game/              # Game server client + packets
-    ├── GameClient.ts
-    ├── GameCrypt.ts   # XOR encryption
-    └── packets/       # incoming/outgoing game packets
+│   └── packets/               # incoming/outgoing login packets
+├── game/                       # Game server client + packets
+│   ├── GameClient.ts
+│   ├── GameCrypt.ts           # XOR encryption
+│   └── packets/               # incoming/outgoing game packets
+└── data/                       # Exported game data (items, NPCs, skills)
+    └── export/                # JSON data from L2J Mobius XML
 ```
 
 ## Key Implementation Details
@@ -68,13 +131,38 @@ src/
 
 ## Configuration
 
-Edit `src/config.ts` with your server settings:
+The project uses environment variables via `.env` file:
 
-- `Username` / `Password` - Login credentials
-- `LoginIp` / `LoginPort` - Login server address (default 2106)
-- `GamePort` - Game server port (default 7777)
-- `ServerId` - Server ID from server list
-- `CharSlotIndex` - Character slot to select (0-based)
+```bash
+# L2 Server Connection
+L2_LOGIN_IP=192.168.0.33         # Login server IP address
+L2_LOGIN_PORT=2106               # Login server port
+L2_GAME_PORT=7777                # Game server port
+L2_USERNAME=your_login           # Game account login
+L2_PASSWORD=your_password        # Game account password
+L2_SERVER_ID=2                   # Server ID from server list
+L2_CHAR_SLOT=0                   # Character slot (0-based index)
+
+# API
+API_KEY=                         # API authentication key (empty = no auth)
+API_PORT=3000                    # API server port
+
+# Logging
+LOG_LEVEL=ERROR                  # DEBUG, INFO, WARN, ERROR, SILENT
+AUTO_CONNECT_GAME=true           # Auto-connect on startup
+```
+
+Copy `.env.example` to `.env` and configure your settings.
+
+## Data Export
+
+The project can export game data from L2J Mobius server XML files:
+
+1. **Download L2J_Mobius CT_0 Interlude** from GitLab
+2. **Copy `data/stats` folder** from server to project root (next to `package.json`)
+3. **Run export command**: `npm run export:data`
+
+Exported data is saved to `src/data/export/` in JSON format (items, NPCs, skills, armorsets, etc.).
 
 ## Documentation Source of Truth
 
@@ -88,9 +176,33 @@ All information about protocol, packet formats and crypto must be taken exclusiv
 
 ## Debugging
 
-- Set `Logger.level = 'DEBUG'` in `src/index.ts` for verbose packet logging
+- Use `npm run debug` for verbose packet logging (instead of manually setting Logger.level)
 - Monitor `[STATE]` log lines to track FSM transitions
+- Use `npm run test:watch` for TDD development
+- Check Dashboard at `http://localhost:3000` for real-time client state
+- WebSocket events can be monitored via browser DevTools or WebSocket clients
 - Check `client_server_protocol.md` for detailed packet formats and crypto specifications
 - Check `DEBUG_HISTORY.md` for a history of previous problems and solutions
 - **Required:** Read `DEBUG_HISTORY.md` before debugging - it contains a history of previous problems and solutions.
 - **Recommendation:** See `DEBUG_NOTES.md` for general debugging tips.
+
+## API Access
+
+- **REST API**: `http://localhost:3000/api/v1/*`
+- **WebSocket**: `ws://localhost:3000/ws`
+- **API Documentation**: `http://localhost:3000/api-docs`
+- **Dashboard**: `http://localhost:3000`
+
+## Adding New Packets
+
+The project uses Factory + Strategy pattern for packet processing:
+
+1. **Create Packet DTO** in `infrastructure/protocol/game/packets/` with `decode()` method
+2. **Create Handler** in `infrastructure/protocol/game/handlers/` extending `BasePacketHandlerStrategy`
+3. **Register in PacketRegistry** - add to `PACKET_REGISTRY` array with opcode mapping
+4. **Add Event Types** in `core/EventBus.ts` if emitting new events
+
+Handlers receive dependencies via DI (characterRepo, worldRepo, eventBus) and should:
+- Check `canHandleInState()` for valid game states
+- Update domain repositories
+- Publish typed events via EventBus
