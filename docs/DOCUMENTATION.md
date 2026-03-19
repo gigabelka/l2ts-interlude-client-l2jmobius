@@ -2344,6 +2344,152 @@ describe('Combat Flow', () => {
 
 ---
 
+## Data Export
+
+Скрипты для экспорта игровых данных (предметы, NPC, скиллы, сеты брони и др.) из сервера L2J Mobius.
+
+### Требования
+
+Перед использованием скриптов необходимо получить исходные XML-данные с сервера:
+
+1. **Скачайте сервер L2J_Mobius CT_0 Interlude:**
+   ```
+   https://gitlab.com/MobiusDevelopment/L2J_Mobius/-/tree/master/L2J_Mobius_CT_0_Interlude
+   ```
+
+2. **Скопируйте папку `data/stats`** из сервера в корень проекта (рядом с `package.json`).
+   В результате должна появиться папка `stats/` с подпапками: `items/`, `npcs/`, `skills/` и др.
+
+### Использование
+
+```bash
+# Полный экспорт (конвертация XML → JSON → нормализация)
+npm run export:data
+
+# Или пошагово:
+node scripts/export-xml.js        # Конвертация XML в database.json
+node scripts/normalize-database.js # Нормализация в удобную структуру
+```
+
+### Результат
+
+Нормализованные данные сохраняются в `src/data/export/`:
+
+| Файл | Описание |
+|------|----------|
+| `armorsets/armorsets.json` | Сеты брони со статами и бонусами |
+| `items/items.json` | Все предметы (оружие, броня, расходники) |
+| `npcs/npcs.json` | NPC с параметрами и дропом |
+| `skills/skills.json` | Скиллы с эффектами |
+| `players/skillTrees.json` | Деревья умений по классам |
+| `players/classTemplates.json` | Стартовые статы и предметы классов |
+| `pets/pets.json` | Данные питомцев |
+| `fishing/fishing.json` | Рыбалка (удочки, рыбы, монстры) |
+| `henna.json` | Хенна (татуировки) |
+| `augmentation/augmentation.json` | Аугментация оружия |
+
+---
+
+## Adding New Packets
+
+Для добавления поддержки нового входящего пакета:
+
+### 1. Создайте Packet DTO
+
+```typescript
+// src/infrastructure/protocol/game/packets/MyNewPacket.ts
+import type { IPacketReader, IIncomingPacket } from '../../../../application/ports';
+
+export interface MyNewData {
+    objectId: number;
+    value: number;
+    name: string;
+}
+
+export class MyNewPacket implements IIncomingPacket {
+    readonly opcode = 0xXX;
+    private data!: MyNewData;
+
+    decode(reader: IPacketReader): this {
+        const objectId = reader.readInt32LE();
+        const value = reader.readInt32LE();
+        const name = reader.readStringUTF16();
+
+        this.data = { objectId, value, name };
+        return this;
+    }
+
+    getData(): MyNewData {
+        return { ...this.data };
+    }
+}
+```
+
+### 2. Создайте Handler
+
+```typescript
+// src/infrastructure/protocol/game/handlers/MyNewHandler.ts
+import { BasePacketHandlerStrategy } from '../GamePacketProcessor';
+import type { PacketContext, IPacketReader } from '../../../../application/ports';
+import type { IEventBus } from '../../../../application/ports';
+import type { ICharacterRepository } from '../../../../domain/repositories';
+import { MyNewPacket } from '../packets/MyNewPacket';
+
+export class MyNewHandler extends BasePacketHandlerStrategy<MyNewPacket> {
+    constructor(
+        eventBus: IEventBus,
+        private characterRepo: ICharacterRepository
+    ) {
+        super(0xXX, eventBus);
+    }
+
+    protected canHandleInState(state: string): boolean {
+        return state === 'IN_GAME';
+    }
+
+    handle(context: PacketContext, reader: IPacketReader): void {
+        const packet = new MyNewPacket();
+        packet.decode(reader);
+        const data = packet.getData();
+
+        // Update repository
+        this.characterRepo.update((char) => {
+            // ... update logic
+            return char;
+        });
+
+        // Publish event
+        this.eventBus.publish({
+            type: 'character.my_event',
+            channel: 'character',
+            data: { value: data.value },
+            timestamp: new Date().toISOString()
+        });
+    }
+}
+```
+
+### 3. Зарегистрируйте в PacketRegistry
+
+```typescript
+// src/infrastructure/protocol/game/PacketRegistry.ts
+import { MyNewPacket } from './packets/MyNewPacket';
+import { MyNewHandler } from './handlers/MyNewHandler';
+
+const PACKET_REGISTRY: PacketConfig[] = [
+    // ... existing packets ...
+    {
+        opcode: 0xXX,
+        packetClass: MyNewPacket,
+        handlerClass: MyNewHandler,
+        repositories: ['character'],
+        description: 'MyNewPacket - description',
+    },
+];
+```
+
+---
+
 ## Project Status
 
 **Current Phase:** Production Ready (v0.4.9)
