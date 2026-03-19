@@ -33,11 +33,12 @@ npm run lint      # Check for linting errors
 npm run lint:fix  # Auto-fix linting errors
 npm run typecheck # Type checking without emit
 
-# Data Export
-npm run export:data # Export game data from L2J Mobius XML to JSON
+# Data Export (requires L2J Mobius stats/ folder in project root)
+npm run export:data # Full export: XML → JSON conversion + normalization
 
 # Development
 npm run clean     # Remove dist/ folder
+npm run commit    # Bump version and commit changes
 ```
 
 ## Architecture
@@ -168,11 +169,11 @@ Exported data is saved to `src/data/export/` in JSON format (items, NPCs, skills
 
 **IMPORTANT:** The following files are the single source of truth and **MUST NOT BE EDITED**:
 
-- `client_server_protocol.md` — client-server protocol documentation
+- `docs/client_server_protocol.md` — client-server protocol documentation
 
 All information about protocol, packet formats and crypto must be taken exclusively from these files. Code in `src/` must match them, not the other way around.
 
-**DOCUMENTATION.md** is a documentation file that must always be kept up to date. It must be regularly updated based on newly received information. This file should contain the most current and accurate information about the project.
+**docs/DOCUMENTATION.md** is a documentation file that must always be kept up to date. It must be regularly updated based on newly received information. This file should contain the most current and accurate information about the project.
 
 ## Debugging
 
@@ -181,10 +182,7 @@ All information about protocol, packet formats and crypto must be taken exclusiv
 - Use `npm run test:watch` for TDD development
 - Check Dashboard at `http://localhost:3000` for real-time client state
 - WebSocket events can be monitored via browser DevTools or WebSocket clients
-- Check `client_server_protocol.md` for detailed packet formats and crypto specifications
-- Check `DEBUG_HISTORY.md` for a history of previous problems and solutions
-- **Required:** Read `DEBUG_HISTORY.md` before debugging - it contains a history of previous problems and solutions.
-- **Recommendation:** See `DEBUG_NOTES.md` for general debugging tips.
+- Check `docs/client_server_protocol.md` for detailed packet formats and crypto specifications
 
 ## API Access
 
@@ -192,6 +190,7 @@ All information about protocol, packet formats and crypto must be taken exclusiv
 - **WebSocket**: `ws://localhost:3000/ws`
 - **API Documentation**: `http://localhost:3000/api-docs`
 - **Dashboard**: `http://localhost:3000`
+- **Detailed API Reference**: See README.md for full endpoint documentation
 
 ## Adding New Packets
 

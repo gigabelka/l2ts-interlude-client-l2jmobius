@@ -6,9 +6,13 @@ This file provides essential information for AI coding agents working on this pr
 
 **L2 Headless Client** is a TypeScript/Node.js bot client for Lineage 2 Interlude game servers. It connects to L2J Mobius CT_0_Interlude servers, authenticates, enters the game world, and provides a REST + WebSocket API for external control.
 
+- **Project Name:** `l2ts-interlude-client-l2jmobius`
+- **Version:** 0.4.8
 - **Target Server:** L2J_Mobius CT_0_Interlude (Protocol 746)
 - **Node.js Version:** >= 24.14.0
 - **License:** MIT
+- **Author:** Viktor Belkin
+- **Repository:** https://github.com/gigabelka/l2ts-interlude-client-l2jmobius
 
 ## Technology Stack
 
@@ -17,74 +21,127 @@ This file provides essential information for AI coding agents working on this pr
 | Language | TypeScript 5.9.3 |
 | Runtime | Node.js 24.14.0+ |
 | Build | tsc (CommonJS output) |
-| Testing | Vitest |
+| Testing | Vitest 2.1.4 |
 | Linting | ESLint with TypeScript |
 | API Framework | Express.js 5.x |
 | WebSocket | ws library |
-| Validation | Zod |
+| Validation | Zod 4.3.6 |
 | DI Container | Custom implementation |
 
 ## Architecture Overview
 
-The project follows **Clean Architecture** principles with clear separation:
+The project follows **Clean Architecture** principles with clear separation of concerns:
 
 ```
 src/
 ├── index.ts                    # Entry point
-├── config.ts                   # Environment configuration
+├── config.ts                   # Environment configuration (Zod validation)
 ├── config/di/                  # Dependency Injection container
-│   ├── Container.ts            # DI container implementation
+│   ├── Container.ts            # DI container implementation with Result<T,E>
 │   ├── appContainer.ts         # Singleton container instance
 │   └── composition.ts          # Service registration
 │
 ├── domain/                     # Domain Layer (business logic)
 │   ├── entities/               # Character, Npc, Item
-│   ├── value-objects/          # Position, Vitals, Stats, Experience
-│   ├── events/                 # Domain events
-│   └── repositories/           # Repository interfaces
+│   ├── value-objects/          # Position, Vitals, Stats, Experience, Identity
+│   ├── events/                 # Domain events (CharacterEvents, ChatEvents, etc.)
+│   └── repositories/           # Repository interfaces (ICharacterRepository, etc.)
 │
 ├── application/                # Application Layer
-│   └── ports/                  # Interfaces (IEventBus, IPacketProcessor, etc.)
+│   └── ports/                  # Interfaces (IEventBus, IPacketProcessor, IConnection, IStateMachine)
 │
 ├── infrastructure/             # Infrastructure Layer
 │   ├── persistence/            # In-memory repository implementations
-│   ├── event-bus/              # SimpleEventBus implementation
+│   ├── event-bus/              # SimpleEventBus, SystemEventBus implementations
+│   ├── cache/                  # InMemoryCacheManager, ICacheManager
+│   ├── network/                # PacketSerializer, BufferPool
 │   └── protocol/game/          # Packet processing (Factory + Strategy)
-│       ├── packets/            # DTOs for incoming packets
-│       ├── handlers/           # Strategy handlers
-│       └── PacketRegistry.ts   # Centralized packet registration
+│       ├── packets/            # DTOs for incoming packets (UserInfoPacket, NpcInfoPacket, etc.)
+│       ├── handlers/           # Strategy handlers (UserInfoHandler, NpcInfoHandler, etc.)
+│       ├── PacketRegistry.ts   # Centralized packet registration
+│       ├── PacketDecoder.ts    # Packet decoding logic
+│       ├── GamePacketProcessor.ts
+│       └── GameIncomingPacketFactory.ts
 │
 ├── api/                        # API Layer
-│   ├── ApiServer.ts            # Express REST server
-│   ├── routes/                 # API endpoints
-│   ├── middleware/             # Auth, rate limiting
+│   ├── ApiServer.ts            # Express REST server with Helmet, CORS
+│   ├── routes/                 # API endpoints (character, combat, movement, chat, etc.)
+│   ├── middleware/             # Auth, rate limiting, request ID
 │   └── ws/WsServer.ts          # WebSocket server
 │
 ├── network/                    # TCP & Packet Layer
 │   ├── Connection.ts           # TCP client with L2 framing
 │   ├── PacketReader.ts         # Binary reader (little-endian)
-│   └── PacketWriter.ts         # Binary writer
+│   └── PacketWriter.ts         # Binary writer (little-endian)
 │
 ├── crypto/                     # Encryption
-│   ├── BlowfishEngine.ts       # Blowfish ECB
+│   ├── BlowfishEngine.ts       # Blowfish ECB implementation
 │   ├── RSACrypt.ts             # RSA (1024-bit, NO_PADDING)
-│   ├── NewCrypt.ts             # Blowfish + checksum + XOR
+│   ├── NewCrypt.ts             # Blowfish + checksum + XOR wrapper
 │   └── ScrambledRSAKey.ts      # RSA modulus unscrambling
 │
 ├── login/                      # Login Server Phase
 │   ├── LoginClient.ts          # FSM-driven login client
-│   ├── LoginCrypt.ts           # Login crypto
-│   └── packets/                # Login packets
+│   ├── LoginCrypt.ts           # Login crypto (Blowfish + XOR)
+│   ├── packets/incoming/       # Incoming packet DTOs (InitPacket, LoginOkPacket, etc.)
+│   ├── packets/outgoing/       # Outgoing packet builders
+│   ├── protocol/handlers/      # Login packet handlers
+│   ├── protocol/LoginPacketProcessor.ts
+│   ├── session/SessionManager.ts
+│   └── types.ts
 │
 ├── game/                       # Game Server Phase
 │   ├── GameClient.ts           # FSM-driven game client
 │   ├── GameCrypt.ts            # XOR encryption
-│   ├── GameCommandManager.ts   # Command manager
-│   └── packets/                # Game packets
+│   ├── GameCommandManager.ts   # Command manager singleton
+│   ├── GameState.ts            # Game state definitions
+│   ├── packets/outgoing/       # Outgoing game packets (MoveToLocation, AttackRequest, etc.)
+│   └── IGamClient.ts
+│
+├── data/                       # Game data
+│   ├── ItemDatabase.ts
+│   ├── NpcDatabase.ts
+│   ├── SkillDatabase.ts
+│   ├── types.ts
+│   ├── constants.ts
+│   └── slotMasks.ts
+│
+├── services/                   # Application services
+│   └── GameDataService.ts
+│
+├── shared/                     # Shared utilities
+│   ├── result/Result.ts        # Result<T,E> monad
+│   ├── types/                  # Primitive types, utility types
+│   └── utils/                  # BufferUtils, TimeUtils, TypeGuards
 │
 ├── logger/                     # Logging utilities
+│   └── Logger.ts
+│
 └── ui/                         # Dashboard UI
+    └── Dashboard.ts
 ```
+
+## Two-Phase Connection Model
+
+### Phase 1: Login Server
+```
+IDLE → CONNECTING → WAIT_INIT → WAIT_GG_AUTH → WAIT_LOGIN_OK → 
+WAIT_SERVER_LIST → WAIT_PLAY_OK → DONE
+```
+- **Encryption:** Static Blowfish → Dynamic Blowfish + XOR → RSA for credentials
+
+### Phase 2: Game Server
+```
+IDLE → CONNECTING → WAIT_CRYPT_INIT → WAIT_CHAR_LIST → 
+WAIT_CHAR_SELECTED → WAIT_USER_INFO → IN_GAME
+```
+- **Encryption:** XOR (can be disabled via CryptInit flag)
+
+## Packet Format
+
+- Each L2 packet starts with `uint16LE` length (including 2-byte header)
+- Data types: C=uint8, H=uint16, D=int32, Q=int64, F=double, S=UTF-16LE null-terminated
+- Extended packets (0xD0 opcode): `[2 bytes: size] [0xD0] [1 byte: extended ID] [payload...]`
 
 ## Build and Run Commands
 
@@ -136,80 +193,30 @@ LOG_LEVEL=ERROR      # DEBUG | INFO | WARN | ERROR | SILENT
 AUTO_CONNECT_GAME=true
 ```
 
-## Key Implementation Details
+Configuration is validated using **Zod** schemas at startup. Invalid configuration will cause the process to exit with detailed error messages.
 
-### Two-Phase Connection Model
-
-**Phase 1: Login Server**
-```
-IDLE → CONNECTING → WAIT_INIT → WAIT_GG_AUTH → WAIT_LOGIN_OK → 
-WAIT_SERVER_LIST → WAIT_PLAY_OK → DONE
-```
-- Encryption: Static Blowfish → Dynamic Blowfish + XOR → RSA for credentials
-
-**Phase 2: Game Server**
-```
-IDLE → CONNECTING → WAIT_CRYPT_INIT → WAIT_CHAR_LIST → 
-WAIT_CHAR_SELECTED → WAIT_USER_INFO → IN_GAME
-```
-- Encryption: XOR (can be disabled via CryptInit flag)
-
-### Packet Format
-
-- Each L2 packet starts with `uint16LE` length (including 2-byte header)
-- Data types: C=uint8, H=uint16, D=int32, Q=int64, F=double, S=UTF-16LE null-terminated
-
-### Adding New Packets
-
-1. Create Packet DTO in `src/infrastructure/protocol/game/packets/`
-2. Create Handler in `src/infrastructure/protocol/game/handlers/`
-3. Register in `src/infrastructure/protocol/game/PacketRegistry.ts`
-4. Add event type to `src/core/EventBus.ts` (if new event)
-
-Example packet structure:
-```typescript
-export class MyPacket implements IIncomingPacket {
-    readonly opcode = 0xXX;
-    
-    decode(reader: IPacketReader): this {
-        // Read packet data
-        return this;
-    }
-}
-```
-
-## Testing Strategy
-
-- **Test Location:** `tests/` directory
-- **Pattern:** `**/*.test.ts`
-- **Setup:** `tests/setup.ts`
-- **Coverage:** HTML, JSON, text reports
-
-Test categories:
-- Unit tests: Domain entities, value objects
-- Integration tests: Packet encoding/decoding
-- Infrastructure tests: Repositories, EventBus
-
-## Code Style Guidelines
-
-### TypeScript Configuration
+## TypeScript Configuration
 
 - **Target:** ES2022
 - **Module:** CommonJS
-- **Strict mode:** Enabled
+- **Strict mode:** Enabled with all strict flags
 - **Path aliases:**
   - `@/*` → `src/*`
   - `@domain/*` → `src/domain/*`
   - `@application/*` → `src/application/*`
   - `@infrastructure/*` → `src/infrastructure/*`
   - `@shared/*` → `src/shared/*`
+  - `@core/*` → `src/core/*`
+
+## Code Style Guidelines
 
 ### Naming Conventions
 
-- Classes/Interfaces: PascalCase
-- Methods/Properties: camelCase
-- Constants: UPPER_SNAKE_CASE
-- Files: PascalCase for classes, camelCase for utilities
+- **Classes/Interfaces:** PascalCase (e.g., `GameClient`, `ICharacterRepository`)
+- **Methods/Properties:** camelCase (e.g., `getCharacter`, `updatePosition`)
+- **Constants:** UPPER_SNAKE_CASE (e.g., `MAX_PACKET_SIZE`)
+- **Files:** PascalCase for classes, camelCase for utilities
+- **Private fields:** Use `private` or `private readonly` modifier
 
 ### ESLint Rules
 
@@ -224,15 +231,60 @@ Test categories:
 - Use `index.ts` for clean exports from directories
 - Prefer interfaces over type aliases for public APIs
 - Use `readonly` for immutable properties
+- Comments in source code are primarily in **Russian**
+
+## Testing Strategy
+
+- **Framework:** Vitest
+- **Test Location:** `tests/` directory
+- **Pattern:** `**/*.test.ts`
+- **Setup:** `tests/setup.ts`
+- **Coverage:** HTML, JSON, text reports
+
+### Test Categories
+
+1. **Unit tests:** Domain entities, value objects (`tests/new-architecture/domain/`)
+2. **Integration tests:** Packet encoding/decoding (`tests/integration/`)
+3. **Infrastructure tests:** Repositories, EventBus, StateMachine (`tests/new-architecture/infrastructure/`)
+4. **Performance tests:** BufferPool, CacheManager, PacketSerializer (`tests/performance/`)
+
+### Test Utilities
+
+- `setupPacketTest()` - Helper for packet tests with mock server
+- `setupApiTest()` - Helper for API tests
+- `waitForEvent<T>()` - Wait for specific event with timeout
+- `waitForCondition()` - Wait for condition with polling
+
+## Dependency Injection
+
+The project uses a custom DI container with `Result<T,E>` monad for error handling:
+
+```typescript
+// Tokens
+DI_TOKENS.CharacterRepository
+DI_TOKENS.WorldRepository
+DI_TOKENS.EventBus
+DI_TOKENS.PacketProcessor
+// ... etc
+
+// Usage
+const container = getContainer();
+const result = container.resolve<IEventBus>(DI_TOKENS.EventBus);
+if (result.isOk()) {
+    const eventBus = result.getOrThrow();
+    // use eventBus
+}
+```
 
 ## API Endpoints
 
 ### Public (No Auth)
 - `GET /health` - Health check
 - `GET /` - Dashboard
-- `GET /api-docs` - API documentation
+- `GET /api-docs` - API documentation (Scalar)
+- `GET /openapi.json` - OpenAPI spec
 
-### Protected Endpoints
+### Protected Endpoints (require API_KEY if set)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -256,6 +308,29 @@ Test categories:
 - Combat commands: 5 req/s
 - General read: 100 req/s
 
+## Adding New Packets
+
+1. Create Packet DTO in `src/infrastructure/protocol/game/packets/`
+2. Create Handler in `src/infrastructure/protocol/game/handlers/`
+3. Register in `src/infrastructure/protocol/game/PacketRegistry.ts`
+4. Add event type to domain events if needed
+
+Example packet structure:
+```typescript
+export class MyPacket implements IIncomingPacket {
+    readonly opcode = 0xXX;
+    
+    decode(reader: IPacketReader): this {
+        // Read packet data
+        return this;
+    }
+    
+    getData(): MyData {
+        return { ...this.data };
+    }
+}
+```
+
 ## Documentation Files
 
 | File | Purpose |
@@ -267,6 +342,15 @@ Test categories:
 
 **Important:** `docs/client_server_protocol.md` is the single source of truth for protocol details. Do not modify it. Code in `src/` must match the protocol documentation.
 
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/copy-dashboard.js` | Copy dashboard files to dist/ |
+| `scripts/export-xml.js` | Export XML data from L2J_Mobius |
+| `scripts/normalize-database.js` | Normalize exported data |
+| `scripts/bump-version.js` | Version bumping for commits |
+
 ## Security Considerations
 
 - Credentials stored in `.env` (gitignored)
@@ -274,6 +358,7 @@ Test categories:
 - Rate limiting on sensitive endpoints
 - Helmet middleware for HTTP security headers
 - CORS enabled for API access
+- Content Security Policy configured for Scalar CDN
 
 ## Common Issues
 
