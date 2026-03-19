@@ -26,7 +26,8 @@ import { ApiServer } from './api/ApiServer';
 import { WsServerNew } from './api/ws/WsServer';
 
 // UI
-import { getDashboard, destroyDashboard } from './ui/Dashboard';
+// import { getDashboard, destroyDashboard } from './ui/Dashboard';
+import { destroyDashboard } from './ui/Dashboard';
 
 import type { SessionData } from './login/types';
 
@@ -70,16 +71,16 @@ async function initApiServer(): Promise<{ api: ApiServer; ws: WsServerNew }> {
 /**
  * Инициализация Dashboard
  */
-function initDashboard(): void {
-    const dashboard = getDashboard({
-        autoRender: true,
-        renderInterval: 2000,
-        colored: true,
-        verbose: Logger.level === 'DEBUG'
-    });
-
-    dashboard.start();
-}
+// function initDashboard(): void {
+//     const dashboard = getDashboard({
+//         autoRender: true,
+//         renderInterval: 2000,
+//         colored: true,
+//         verbose: Logger.level === 'DEBUG'
+//     });
+// 
+//     dashboard.start();
+// }
 
 // ============================================================================
 // ОБРАБОТКА СОБЫТИЙ
@@ -174,8 +175,8 @@ async function main(): Promise<void> {
     // 3. Инициализация API сервера
     const services = await initApiServer();
 
-    // 4. Инициализация Dashboard
-    initDashboard();
+    // 4. Инициализация Dashboard (Отключено для отладки)
+    // initDashboard();
 
     // 5. Настройка graceful shutdown
     process.on('SIGINT', () => shutdown(services));

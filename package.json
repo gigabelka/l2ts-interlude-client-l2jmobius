@@ -1,6 +1,6 @@
 {
   "name": "l2ts-interlude-client-l2jmobius",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Headless Lineage 2 Interlude client for L2J Mobius servers",
   "chronicle": "Interlude",
   "protocols": [

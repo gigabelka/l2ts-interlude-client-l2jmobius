@@ -47,11 +47,13 @@ export class BufferPool {
             // Reset buffer content (zero fill for security)
             buffer.fill(0);
             this.stats.reused++;
-            return buffer.subarray(0, size);
+            return buffer;
         }
 
         this.stats.allocated++;
-        return Buffer.allocUnsafe(size);
+        const newBuffer = Buffer.allocUnsafe(poolSize);
+        newBuffer.fill(0);
+        return newBuffer;
     }
 
     /**

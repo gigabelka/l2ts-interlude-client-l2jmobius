@@ -87,6 +87,8 @@ export class GamePacketProcessor implements IPacketProcessor {
 
         // Выполняем middleware chain
         let middlewareIndex = 0;
+        let handlerExecuted = false;
+
         const executeMiddleware = (): void => {
             if (middlewareIndex < this.middlewares.length) {
                 const mw = this.middlewares[middlewareIndex++];
@@ -95,7 +97,7 @@ export class GamePacketProcessor implements IPacketProcessor {
                 }
             } else {
                 // После всех middleware выполняем обработчики
-                this.executeHandlers(context, packet);
+                handlerExecuted = this.executeHandlers(context, packet);
             }
         };
 
@@ -104,14 +106,16 @@ export class GamePacketProcessor implements IPacketProcessor {
         return {
             success: true,
             packet,
+            handlerExecuted,
             context,
         };
     }
 
     /**
      * Выполнить стратегии обработки
+     * @returns true если хотя бы один обработчик выполнился
      */
-    private executeHandlers(context: PacketContext, _packet: IIncomingPacket): void {
+    private executeHandlers(context: PacketContext, _packet: IIncomingPacket): boolean {
         const { opcode, state } = context;
 
         // Находим подходящий обработчик
@@ -122,15 +126,14 @@ export class GamePacketProcessor implements IPacketProcessor {
                     // Пропускаем 1 байт (код операции), так как он уже известен
                     const reader = new PacketReader(context.rawBody, 1);
                     handler.handle(context, reader);
+                    return true; // Обработчик успешно выполнен
                 } catch (error) {
                     console.error(`Error in packet handler for opcode ${opcode}:`, error);
                 }
-                return; // Первый подходящий обработчик
             }
         }
 
-        // Если нет подходящего обработчика - игнорируем или логируем
-        // Это нормально - не все пакеты требуют обработки
+        return false; // Ни один обработчик не выполнился
     }
 
     /**

@@ -67,8 +67,8 @@ export class UserInfoHandler extends BasePacketHandlerStrategy<UserInfoPacket> {
     }
 
     protected canHandleInState(state: string): boolean {
-        // Обрабатываем в состояниях ожидания входа и в игре
-        return state === 'WAIT_USER_INFO' || state === 'IN_GAME';
+        // Обрабатываем в состояниях ожидания входа, выбора персонажа и в игре
+        return state === 'WAIT_USER_INFO' || state === 'IN_GAME' || state === 'WAIT_CHAR_SELECTED';
     }
 
     handle(_context: PacketContext, reader: IPacketReader): void {

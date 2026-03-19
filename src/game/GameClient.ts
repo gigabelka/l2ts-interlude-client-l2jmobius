@@ -143,6 +143,7 @@ export class GameClientNew implements IGameClient {
         const body = this.crypt.decrypt(encryptedBody);
         const opcode = body[0]!;
 
+        Logger.info('GameClient', `[RECV] opcode=0x${opcode.toString(16).padStart(2, '0')} state=${this.state}`);
         Logger.logPacket('RECV', opcode, fullPacket);
         Logger.debug('GameClient', `[state=${this.state}] opcode=0x${opcode.toString(16).padStart(2, '0')} bodyLen=${body.length}`);
         Logger.hexDump('RECV DECRYPTED', body, Math.min(body.length, 64));
@@ -153,11 +154,14 @@ export class GameClientNew implements IGameClient {
         // Process packet with new architecture
         const result = this.deps.packetProcessor.process(opcode, body, this.state);
 
-        if (result.success) {
-            Logger.debug('GameClient', `Processed packet opcode=0x${opcode.toString(16).padStart(2, '0')} in state=${this.state}`);
+        if (result.success && result.handlerExecuted) {
+            Logger.debug('GameClient', `Processed packet opcode=0x${opcode.toString(16).padStart(2, '0')} via new architecture in state=${this.state}`);
             this.handlePacket(result.packet, opcode);
         } else {
-            // Handle packets not processed by the new system (handshake packets)
+            // Handle packets not processed by the new system (handshake packets or legacy fallback)
+            if (result.success) {
+                Logger.debug('GameClient', `Packet 0x${opcode.toString(16).padStart(2, '0')} recognized but NOT handled by new architecture in state=${this.state}. Falling back to legacy handler.`);
+            }
             this.handleHandshakePacket(opcode, body);
         }
     }
@@ -165,32 +169,16 @@ export class GameClientNew implements IGameClient {
     private handlePacket(_packet: unknown, opcode: number): void {
         // Post-processing for state transitions
         switch (this.state) {
+            case GameState.WAIT_CHAR_SELECTED:
+                if (opcode === 0x04) {
+                    Logger.info('GameClient', 'Server skipped CharSelected (0x15) confirmation. Transitioning to UserInfo.');
+                    this.handleCharSelected();
+                    this.onUserInfoReceived(opcode);
+                }
+                break;
             case GameState.WAIT_USER_INFO:
                 if (opcode === 0x04) {
-                    // UserInfo received - character is now in game
-                    const char = this.deps.characterRepo.get();
-                    if (char) {
-                        Logger.info('GameClient', `ENTERED GAME WORLD AS: ${char.name}`);
-                        Logger.logState(this.state, GameState.IN_GAME);
-                        this.state = GameState.IN_GAME;
-
-                        this.publishConnectionState(ConnectionPhase.IN_GAME);
-                        this.publishConnectedEvent(char.name);
-
-                        // Request inventory
-                        Logger.info('GameClient', 'Requesting inventory...');
-                        this.sendPacket(new RequestInventoryOpen());
-
-                        // Retry inventory request after 3 seconds
-                        this.inventoryRetryTimer = setTimeout(() => {
-                            const state = this.deps.inventoryRepo.getState();
-                            if (state.items.length === 0) {
-                                Logger.info('GameClient', 'Inventory empty, retrying request...');
-                                this.sendPacket(new RequestInventoryOpen());
-                            }
-                            this.inventoryRetryTimer = null;
-                        }, 3000);
-                    }
+                    this.onUserInfoReceived(opcode);
                 }
                 break;
 
@@ -201,6 +189,7 @@ export class GameClientNew implements IGameClient {
     }
 
     private handleHandshakePacket(opcode: number, body: Buffer): void {
+        Logger.info('GameClient', `handleHandshakePacket: opcode=0x${opcode.toString(16).padStart(2, '0')} state=${this.state}`);
         // Handle handshake packets that aren't in the new processor yet
         switch (this.state) {
             case GameState.WAIT_CRYPT_INIT: {
@@ -293,9 +282,14 @@ export class GameClientNew implements IGameClient {
     sendPacket(packet: OutgoingGamePacket): Result<void, Error> {
         try {
             const body = packet.encode();
+            Logger.debug('GameClient', `sendPacket: body length from encode() = ${body.length}`);
+            
             const encrypted = this.crypt.encrypt(body);
+            Logger.debug('GameClient', `sendPacket: encrypted length = ${encrypted.length}`);
 
             const { buffer, cleanup } = this.packetSerializer.serializeRawWithHeader(encrypted);
+            Logger.debug('GameClient', `sendPacket: framed buffer length = ${buffer.length}`);
+            
             this.connection.send(buffer);
 
             // Release buffer back to pool after send
@@ -404,5 +398,37 @@ export class GameClientNew implements IGameClient {
             },
             timestamp: new Date(),
         });
+    }
+
+    /**
+     * Обработка получения UserInfo (0x04)
+     */
+    private onUserInfoReceived(opcode: number): void {
+        if (opcode !== 0x04) return;
+
+        // UserInfo received - character is now in game
+        const char = this.deps.characterRepo.get();
+        if (char) {
+            Logger.info('GameClient', `ENTERED GAME WORLD AS: ${char.name}`);
+            Logger.logState(this.state, GameState.IN_GAME);
+            this.state = GameState.IN_GAME;
+
+            this.publishConnectionState(ConnectionPhase.IN_GAME);
+            this.publishConnectedEvent(char.name);
+
+            // Request inventory
+            Logger.info('GameClient', 'Requesting inventory...');
+            this.sendPacket(new RequestInventoryOpen());
+
+            // Retry inventory request after 3 seconds
+            this.inventoryRetryTimer = setTimeout(() => {
+                const state = this.deps.inventoryRepo.getState();
+                if (state.items.length === 0) {
+                    Logger.info('GameClient', 'Inventory empty, retrying request...');
+                    this.sendPacket(new RequestInventoryOpen());
+                }
+                this.inventoryRetryTimer = null;
+            }, 3000);
+        }
     }
 }

@@ -21,6 +21,7 @@ export interface PacketContext {
 export interface PacketResult<T = unknown> {
     success: boolean;
     packet?: T;
+    handlerExecuted?: boolean;
     error?: string;
     context: PacketContext;
 }

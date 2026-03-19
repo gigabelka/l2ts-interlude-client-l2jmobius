@@ -129,6 +129,7 @@ export class LoginPacketProcessor {
 
         // Выполняем middleware chain
         let middlewareError: Error | undefined;
+        let handlerExecuted = false;
 
         const executeMiddleware = (index: number): void => {
             if (index < this.middlewares.length) {
@@ -142,7 +143,7 @@ export class LoginPacketProcessor {
                 }
             } else {
                 // После всех middleware выполняем обработчики
-                this.executeHandlers(context, packet);
+                handlerExecuted = this.executeHandlers(context, packet);
             }
         };
 
@@ -163,6 +164,7 @@ export class LoginPacketProcessor {
         return {
             success: true,
             packet,
+            handlerExecuted,
             context,
             action: this.determineAction(context, packet),
         };
@@ -170,8 +172,9 @@ export class LoginPacketProcessor {
 
     /**
      * Выполнить стратегии обработки
+     * @returns true если хотя бы один обработчик выполнился
      */
-    private executeHandlers(context: LoginPacketContext, packet: IIncomingPacket): void {
+    private executeHandlers(context: LoginPacketContext, packet: IIncomingPacket): boolean {
         const { opcode, state } = context;
 
         // Декодируем пакет сначала (для использования в handlePacket)
@@ -189,12 +192,14 @@ export class LoginPacketProcessor {
                     // Создаем reader из raw данных (свежий reader для handler)
                     const reader: IPacketReader = this.createReader(context.rawBody);
                     handler.handle(context, reader);
+                    return true; // Обработчик успешно выполнен
                 } catch (error) {
                     console.error(`Error in packet handler for opcode ${opcode}:`, error);
                 }
-                return; // Первый подходящий обработчик
             }
         }
+
+        return false; // Ни один обработчик не выполнился
     }
 
     /**
