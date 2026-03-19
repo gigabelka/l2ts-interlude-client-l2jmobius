@@ -5,6 +5,7 @@
  */
 
 import type { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
+import type { Result } from '../shared/result';
 
 /**
  * Interface for game client implementations
@@ -14,8 +15,9 @@ export interface IGameClient {
     /**
      * Send a packet to the game server
      * @param packet - Outgoing packet to send
+     * @returns Result indicating success or failure
      */
-    sendPacket(packet: OutgoingGamePacket): void;
+    sendPacket(packet: OutgoingGamePacket): Result<void, Error>;
 }
 
 /**

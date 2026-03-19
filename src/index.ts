@@ -17,6 +17,7 @@ import type { ICharacterRepository, IWorldRepository, IInventoryRepository, ICon
 import { GameClientNew } from './game/GameClient';
 import { LoginClientNew } from './login/LoginClient';
 import { initGameCommandManager } from './game/GameCommandManager';
+import Connection from './network/Connection';
 
 
 // API
@@ -110,6 +111,7 @@ function onLoginComplete(session: SessionData): void {
     });
 
     // Запускаем Game Client
+    const connection = new Connection();
     const gameClient = new GameClientNew(session, {
         eventBus,
         systemEventBus,
@@ -119,7 +121,7 @@ function onLoginComplete(session: SessionData): void {
         inventoryRepo: invRepo,
         connectionRepo,
         commandManager,
-    });
+    }, connection);
     gameClient.start();
 }
 

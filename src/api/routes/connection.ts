@@ -11,6 +11,7 @@ import type { ICharacterRepository, IWorldRepository, IInventoryRepository, ICon
 import { ConnectionPhase } from '../../domain/repositories/IConnectionRepository';
 import type { IEventBus, IPacketProcessor } from '../../application/ports';
 import type { ISystemEventBus } from '../../infrastructure/event-bus';
+import Connection from '../../network/Connection';
 
 // Repository accessors
 const container = getContainer();
@@ -67,7 +68,8 @@ function createGameSession(overrideConfig?: Partial<LoginConfig>): void {
             Logger.info('ConnectionRoute', 'Login Server auth successful');
             Logger.info('ConnectionRoute', `Game Server: ${session.gameServerIp}:${session.gameServerPort}`);
 
-            // Create and start GameClient
+            // Create and start GameClient with composition (Connection injected)
+            const connection = new Connection();
             activeGameClient = new GameClientNew(session, {
                 eventBus,
                 systemEventBus: getSystemEventBus(),
@@ -77,7 +79,7 @@ function createGameSession(overrideConfig?: Partial<LoginConfig>): void {
                 inventoryRepo: getInventoryRepo(),
                 connectionRepo,
                 commandManager: GameCommandManager,
-            });
+            }, connection);
             activeGameClient.start();
         },
         { eventBus, connectionRepo }

@@ -37,9 +37,14 @@ export class InMemoryCharacterRepository implements ICharacterRepository {
     }
 
     save(character: Character): Result<void, CharacterRepositoryError> {
-        // Сохраняем копию для иммутабельности
-        this.character = this.cloneCharacter(character);
-        return Result.ok(undefined);
+        try {
+            // Сохраняем копию для иммутабельности
+            this.character = this.cloneCharacter(character);
+            return Result.ok(undefined);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return Result.err(CharacterRepositoryError.saveFailed(message));
+        }
     }
 
     update(updater: (char: Character) => Character): Result<void, CharacterRepositoryError> {
@@ -48,10 +53,13 @@ export class InMemoryCharacterRepository implements ICharacterRepository {
             return Result.err(CharacterRepositoryError.notInitialized());
         }
 
-        const updated = updater(current);
-        this.save(updated);
-
-        return Result.ok(undefined);
+        try {
+            const updated = updater(current);
+            return this.save(updated);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return Result.err(CharacterRepositoryError.updateFailed(message));
+        }
     }
 
     exists(): boolean {

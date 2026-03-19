@@ -65,7 +65,7 @@ export class LoginClientNew extends Connection {
         this.connect(this.config.LoginIp, this.config.LoginPort);
     }
 
-    protected onConnect(): void {
+    protected override handleConnect(): void {
         Logger.info('LoginClient', 'Connected to Login Server');
         Logger.logState(this.state, LoginState.WAIT_INIT);
         this.state = LoginState.WAIT_INIT;
@@ -73,7 +73,7 @@ export class LoginClientNew extends Connection {
         this.deps.eventBus.publish(new ConnectionPhaseChangedEvent({ phase: ConnectionPhase.LOGIN_AUTHENTICATING }));
     }
 
-    protected onClose(): void {
+    protected override handleDisconnect(): void {
         Logger.info('LoginClient', 'Login Server connection closed');
         if (this.state !== LoginState.DONE) {
             this.deps.connectionRepo.setPhase(ConnectionPhase.DISCONNECTED);
@@ -81,7 +81,7 @@ export class LoginClientNew extends Connection {
         }
     }
 
-    protected onError(err: Error): void {
+    protected override handleError(err: Error): void {
         Logger.error('LoginClient', `Error: ${err.message}`);
         this.state = LoginState.ERROR;
         this.deps.connectionRepo.setPhase(ConnectionPhase.ERROR);
@@ -89,7 +89,7 @@ export class LoginClientNew extends Connection {
         this.publishErrorEvent(err.message);
     }
 
-    protected onRawPacket(fullPacket: Buffer): void {
+    protected override handleRawPacket(fullPacket: Buffer): void {
         const body = fullPacket.subarray(2);
 
         let decrypted: Buffer;

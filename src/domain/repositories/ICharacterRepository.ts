@@ -35,6 +35,20 @@ export class CharacterRepositoryError extends Error {
             'CHARACTER_NOT_INITIALIZED'
         );
     }
+
+    static saveFailed(reason: string): CharacterRepositoryError {
+        return new CharacterRepositoryError(
+            `Failed to save character: ${reason}`,
+            'CHARACTER_SAVE_FAILED'
+        );
+    }
+
+    static updateFailed(reason: string): CharacterRepositoryError {
+        return new CharacterRepositoryError(
+            `Failed to update character: ${reason}`,
+            'CHARACTER_UPDATE_FAILED'
+        );
+    }
 }
 
 /**

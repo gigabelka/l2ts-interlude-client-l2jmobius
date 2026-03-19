@@ -3,11 +3,29 @@ import { GameClientNew } from '../../src/game/GameClient';
 import { getContainer, resetContainer } from '../../src/config/di/appContainer';
 import { GameState } from '../../src/game/GameState';
 import { SessionData } from '../../src/login/types';
+import type { INetworkConnection } from '../../src/network/INetworkConnection';
 
 import { DI_TOKENS } from '../../src/config/di/Container';
 
+/**
+ * Mock network connection for testing
+ */
+function createMockConnection(): INetworkConnection {
+    return {
+        connect: vi.fn(),
+        disconnect: vi.fn(),
+        send: vi.fn(),
+        isConnected: vi.fn(() => false),
+        onData: vi.fn(),
+        onConnect: vi.fn(),
+        onDisconnect: vi.fn(),
+        onError: vi.fn(),
+    };
+}
+
 describe('GameClient Selection Flow', () => {
     let gameClient: GameClientNew;
+    let mockConnection: INetworkConnection;
     
     const session: SessionData = {
         sessionId: 12345,
@@ -28,14 +46,17 @@ describe('GameClient Selection Flow', () => {
         const container = getContainer();
         const deps = {
             eventBus: container.resolve(DI_TOKENS.EventBus).getOrThrow(),
+            systemEventBus: container.resolve(DI_TOKENS.SystemEventBus).getOrThrow(),
             packetProcessor: container.resolve(DI_TOKENS.PacketProcessor).getOrThrow(),
             characterRepo: container.resolve(DI_TOKENS.CharacterRepository).getOrThrow(),
             worldRepo: container.resolve(DI_TOKENS.WorldRepository).getOrThrow(),
             inventoryRepo: container.resolve(DI_TOKENS.InventoryRepository).getOrThrow(),
             connectionRepo: container.resolve(DI_TOKENS.ConnectionRepository).getOrThrow(),
+            commandManager: { setGameClient: vi.fn() },
         };
 
-        gameClient = new GameClientNew(session, deps as any);
+        mockConnection = createMockConnection();
+        gameClient = new GameClientNew(session, deps as any, mockConnection);
     });
 
     it('should transition to WAIT_CHAR_SELECTED after receiving CharSelectInfo (0x13)', () => {

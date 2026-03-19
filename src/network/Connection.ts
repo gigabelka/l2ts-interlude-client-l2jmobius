@@ -1,8 +1,9 @@
 import * as net from 'node:net';
 import { Logger } from '../logger/Logger';
+import type { INetworkConnection, ConnectCallback, DisconnectCallback, ErrorCallback, DataCallback } from './INetworkConnection';
 
 /**
- * @fileoverview Connection - Abstract TCP client with L2 packet framing
+ * @fileoverview Connection - TCP client with L2 packet framing
  * 
  * Handles low-level TCP connection management and implements the Lineage 2
  * packet framing protocol. Each packet begins with a 2-byte length header
@@ -11,7 +12,7 @@ import { Logger } from '../logger/Logger';
  * Key features:
  * - Automatic packet reassembly from TCP stream
  * - Connection state management (connect, disconnect, error)
- * - Abstract interface for protocol-specific implementations
+ * - Event-based interface for protocol-specific implementations
  * 
  * L2 Packet Format:
  * ```
@@ -24,46 +25,25 @@ import { Logger } from '../logger/Logger';
  * @module network/Connection
  * @example
  * ```typescript
- * class GameClient extends Connection {
- *   protected onRawPacket(fullPacket: Buffer): void {
- *     const body = fullPacket.subarray(2);
- *     const opcode = body[0];
- *     console.log(`Received packet opcode=${opcode}`);
- *   }
- * 
- *   protected onConnect(): void {
- *     console.log('Connected!');
- *   }
- * 
- *   protected onClose(): void {
- *     console.log('Disconnected!');
- *   }
- * 
- *   protected onError(err: Error): void {
- *     console.error('Error:', err);
- *   }
- * }
- * 
- * const client = new GameClient();
- * client.connect('127.0.0.1', 7777);
+ * const connection = new Connection();
+ * connection.onConnect(() => console.log('Connected!'));
+ * connection.onData((data) => console.log('Received:', data));
+ * connection.connect('127.0.0.1', 7777);
  * ```
  */
 
 /**
- * Abstract TCP connection with Lineage 2 packet framing.
+ * TCP connection with Lineage 2 packet framing.
  * 
  * Implements the base TCP connection logic including:
  * - Connection establishment and teardown
  * - Packet reassembly from TCP stream
- * - Abstract handlers for protocol-specific processing
+ * - Event-based handlers for protocol-specific processing
  * 
- * Subclasses must implement the abstract handler methods to process
- * packets and handle connection state changes.
- * 
- * @abstract
  * @class Connection
+ * @implements INetworkConnection
  */
-abstract class Connection {
+class Connection implements INetworkConnection {
   /** Underlying TCP socket */
   protected socket?: net.Socket;
   /** Receive buffer for packet reassembly */
@@ -77,6 +57,12 @@ abstract class Connection {
   /** Connection timeout in milliseconds */
   private readonly CONNECT_TIMEOUT_MS = 10000;
 
+  /** Event callbacks */
+  private onConnectCallbacks: ConnectCallback[] = [];
+  private onDisconnectCallbacks: DisconnectCallback[] = [];
+  private onErrorCallbacks: ErrorCallback[] = [];
+  private onDataCallbacks: DataCallback[] = [];
+
   /**
    * Establish TCP connection to the specified host and port.
    * 
@@ -84,7 +70,7 @@ abstract class Connection {
    * @param {number} port - Remote port number
    * @example
    * ```typescript
-   * client.connect('192.168.1.100', 7777);
+   * connection.connect('192.168.1.100', 7777);
    * ```
    */
   connect(host: string, port: number): void {
@@ -100,7 +86,7 @@ abstract class Connection {
       const timeoutError = new Error(`Connection timeout after ${this.CONNECT_TIMEOUT_MS}ms`);
       Logger.error('TCP', timeoutError.message);
       this.socket?.destroy();
-      this.onError(timeoutError);
+      this.emitError(timeoutError);
     }, this.CONNECT_TIMEOUT_MS);
 
     this.socket.on('connect', () => {
@@ -110,7 +96,7 @@ abstract class Connection {
         this.connectTimeout = undefined;
       }
       Logger.info('TCP', `Connected to ${host}:${port}`);
-      this.onConnect();
+      this.emitConnect();
     });
 
     this.socket.on('data', (chunk: Buffer) => {
@@ -124,7 +110,7 @@ abstract class Connection {
         this.connectTimeout = undefined;
       }
       Logger.info('TCP', `Connection to ${host}:${port} closed (${hadError ? 'with error' : 'clean'})`);
-      this.onClose();
+      this.emitDisconnect();
     });
 
     this.socket.on('error', (err: Error) => {
@@ -134,7 +120,7 @@ abstract class Connection {
         this.connectTimeout = undefined;
       }
       Logger.error('TCP', `Socket error: ${err.message}`);
-      this.onError(err);
+      this.emitError(err);
     });
 
     try {
@@ -147,22 +133,21 @@ abstract class Connection {
       }
       const error = err instanceof Error ? err : new Error(String(err));
       Logger.error('TCP', `Connection failed: ${error.message}`);
-      this.onError(error);
+      this.emitError(error);
     }
   }
 
   /**
    * Send raw data over the TCP connection.
    * 
-   * @protected
    * @param {Buffer} data - Raw bytes to send
    * @example
    * ```typescript
    * const packet = Buffer.from([0x00, 0x05, 0x01, 0x02, 0x03]);
-   * this.sendRaw(packet);
+   * connection.send(packet);
    * ```
    */
-  protected sendRaw(data: Buffer): void {
+  send(data: Buffer): void {
     if (!this.socket || this.socket.destroyed) {
       Logger.error('TCP', 'Cannot send: socket not initialized or destroyed');
       return;
@@ -172,11 +157,58 @@ abstract class Connection {
   }
 
   /**
+   * @deprecated Use send() instead
+   */
+  protected sendRaw(data: Buffer): void {
+    this.send(data);
+  }
+
+  /**
+   * Check if connection is established.
+   * @returns true if socket exists and is not destroyed
+   */
+  isConnected(): boolean {
+    return !!this.socket && !this.socket.destroyed && this.socket.readyState === 'open';
+  }
+
+  /**
+   * Register callback for incoming data.
+   * @param callback - Function to call when data is received
+   */
+  onData(callback: DataCallback): void {
+    this.onDataCallbacks.push(callback);
+  }
+
+  /**
+   * Register callback for connection establishment.
+   * @param callback - Function to call when connected
+   */
+  onConnect(callback: ConnectCallback): void {
+    this.onConnectCallbacks.push(callback);
+  }
+
+  /**
+   * Register callback for connection closure.
+   * @param callback - Function to call when disconnected
+   */
+  onDisconnect(callback: DisconnectCallback): void {
+    this.onDisconnectCallbacks.push(callback);
+  }
+
+  /**
+   * Register callback for connection errors.
+   * @param callback - Function to call when error occurs
+   */
+  onError(callback: ErrorCallback): void {
+    this.onErrorCallbacks.push(callback);
+  }
+
+  /**
    * Close the TCP connection gracefully.
    * 
    * @example
    * ```typescript
-   * client.disconnect();
+   * connection.disconnect();
    * ```
    */
   disconnect(): void {
@@ -199,7 +231,7 @@ abstract class Connection {
    * 
    * The L2 protocol uses a 2-byte length prefix (uint16LE) at the start
    * of each packet. This method accumulates incoming data and extracts
-   * complete packets, calling onRawPacket for each one.
+   * complete packets, calling onData callbacks for each one.
    * 
    * @private
    * @param {Buffer} chunk - Raw TCP data chunk
@@ -222,46 +254,119 @@ abstract class Connection {
       this.recvBuffer  = this.recvBuffer.subarray(packetLen);
 
       Logger.debug('TCP', `Packet assembled: ${fullPacket.length} bytes, buffer remaining: ${this.recvBuffer.length} bytes`);
-      this.onRawPacket(fullPacket);
+      this.emitData(fullPacket);
     }
   }
 
   /**
-   * Handle a complete packet received from the server.
-   * 
-   * @abstract
-   * @protected
-   * @param {Buffer} fullPacket - Complete packet including 2-byte length header
+   * Emit connect event to all registered callbacks
    */
-  protected abstract onRawPacket(fullPacket: Buffer): void;
+  private emitConnect(): void {
+    // First call legacy handler for backward compatibility with subclasses
+    this.handleConnect();
+    
+    // Then call registered callbacks
+    for (const callback of this.onConnectCallbacks) {
+      try {
+        callback();
+      } catch (err) {
+        Logger.error('TCP', `Error in connect callback: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Emit disconnect event to all registered callbacks
+   */
+  private emitDisconnect(): void {
+    // First call legacy handler for backward compatibility with subclasses
+    this.handleDisconnect();
+    
+    // Then call registered callbacks
+    for (const callback of this.onDisconnectCallbacks) {
+      try {
+        callback();
+      } catch (err) {
+        Logger.error('TCP', `Error in disconnect callback: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Emit error event to all registered callbacks
+   */
+  private emitError(error: Error): void {
+    // First call legacy handler for backward compatibility with subclasses
+    this.handleError(error);
+    
+    // Then call registered callbacks
+    for (const callback of this.onErrorCallbacks) {
+      try {
+        callback(error);
+      } catch (err) {
+        Logger.error('TCP', `Error in error callback: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Legacy error handler - override in subclasses for custom processing.
+   * @protected
+   * @param {Error} _error - Error object
+   */
+  protected handleError(_error: Error): void {
+    // Override in subclass for legacy behavior
+  }
+
+  /**
+   * Emit data event to all registered callbacks
+   */
+  private emitData(data: Buffer): void {
+    // First call legacy handler for backward compatibility with subclasses
+    this.handleRawPacket(data);
+    
+    // Then call registered callbacks
+    for (const callback of this.onDataCallbacks) {
+      try {
+        callback(data);
+      } catch (err) {
+        Logger.error('TCP', `Error in data callback: ${err}`);
+      }
+    }
+  }
+
+  // ============================================================================
+  // Legacy protected methods - for backward compatibility with existing subclasses
+  // These are called by the emit methods
+  // ============================================================================
+
+  /**
+   * Handle a complete packet received from the server.
+   * Override this method in subclasses for custom processing.
+   * @protected
+   * @param {Buffer} _fullPacket - Complete packet including 2-byte length header
+   */
+  protected handleRawPacket(_fullPacket: Buffer): void {
+    // Override in subclass for legacy behavior
+  }
 
   /**
    * Handle successful connection establishment.
-   * Called when the TCP connection is established.
-   * 
-   * @abstract
+   * Override this method in subclasses for custom processing.
    * @protected
    */
-  protected abstract onConnect(): void;
+  protected handleConnect(): void {
+    // Override in subclass for legacy behavior
+  }
 
   /**
    * Handle connection closure.
-   * Called when the TCP connection is closed.
-   * 
-   * @abstract
+   * Override this method in subclasses for custom processing.
    * @protected
    */
-  protected abstract onClose(): void;
-
-  /**
-   * Handle connection errors.
-   * Called when a socket error occurs.
-   * 
-   * @abstract
-   * @protected
-   * @param {Error} err - Error object
-   */
-  protected abstract onError(err: Error): void;
+  protected handleDisconnect(): void {
+    // Override in subclass for legacy behavior
+  }
 }
 
 export default Connection;

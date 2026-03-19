@@ -1,15 +1,16 @@
 /**
- * @fileoverview GameClientNew - Рефакторинг GameClient с новой архитектурой
- * Использует Clean Architecture: repositories, EventBus, PacketProcessor
+ * @fileoverview GameClientNew - Game Client с Clean Architecture и композицией
+ * Использует композицию вместо наследования для улучшения тестируемости
  * @module game/GameClientNew
  */
 
-import Connection from '../network/Connection';
 import { Logger } from '../logger/Logger';
 import { GameState } from './GameState';
 import type { SessionData } from '../login/types';
 import { GameCrypt } from './GameCrypt';
 import { CONFIG } from '../config';
+import { Result } from '../shared/result';
+import type { INetworkConnection } from '../network/INetworkConnection';
 
 // New Architecture imports
 import type { IEventBus, IPacketProcessor } from '../application/ports';
@@ -46,8 +47,9 @@ export interface GameClientDependencies {
 
 /**
  * Game Server connection client with Clean Architecture
+ * Использует композицию вместо наследования для лучшей тестируемости
  */
-export class GameClientNew extends Connection implements IGameClient {
+export class GameClientNew implements IGameClient {
     private state: GameState = GameState.IDLE;
     private crypt: GameCrypt = new GameCrypt();
     private deps: GameClientDependencies;
@@ -55,27 +57,46 @@ export class GameClientNew extends Connection implements IGameClient {
 
     constructor(
         private session: SessionData,
-        deps: GameClientDependencies
+        deps: GameClientDependencies,
+        private connection: INetworkConnection // Инъекция зависимости через композицию
     ) {
-        super();
         this.deps = deps;
+        this.setupConnectionEvents();
     }
 
-    start(): void {
-        Logger.logState(this.state, GameState.CONNECTING);
-        Logger.info('GameClient', `Connecting to Game Server: ${this.session.gameServerIp}:${this.session.gameServerPort}`);
-        this.state = GameState.CONNECTING;
-
-        // Initialize services
-        this.deps.commandManager.setGameClient(this);
-
-        // Update connection state via repository
-        this.publishConnectionState(ConnectionPhase.ENTERING_GAME);
-
-        this.connect(this.session.gameServerIp, this.session.gameServerPort);
+    /**
+     * Setup connection event handlers
+     */
+    private setupConnectionEvents(): void {
+        this.connection.onConnect(() => this.handleConnect());
+        this.connection.onDisconnect(() => this.handleDisconnect());
+        this.connection.onError((error) => this.handleError(error));
+        this.connection.onData((data) => this.handleRawPacket(data));
     }
 
-    protected onConnect(): void {
+    start(): Result<void, Error> {
+        try {
+            Logger.logState(this.state, GameState.CONNECTING);
+            Logger.info('GameClient', `Connecting to Game Server: ${this.session.gameServerIp}:${this.session.gameServerPort}`);
+            this.state = GameState.CONNECTING;
+
+            // Initialize services
+            this.deps.commandManager.setGameClient(this);
+
+            // Update connection state via repository
+            this.publishConnectionState(ConnectionPhase.ENTERING_GAME);
+
+            this.connection.connect(this.session.gameServerIp, this.session.gameServerPort);
+            return Result.ok(undefined);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            Logger.error('GameClient', `Failed to start: ${message}`);
+            this.state = GameState.ERROR;
+            return Result.err(new Error(`Failed to start GameClient: ${message}`));
+        }
+    }
+
+    private handleConnect(): void {
         Logger.info('GameClient', 'Connected to Game Server');
         Logger.logState(this.state, GameState.WAIT_CRYPT_INIT);
         this.state = GameState.WAIT_CRYPT_INIT;
@@ -84,7 +105,7 @@ export class GameClientNew extends Connection implements IGameClient {
         this.sendPacketRawBuffer(pv.encode());
     }
 
-    protected onClose(): void {
+    private handleDisconnect(): void {
         Logger.info('GameClient', '*** GAME SERVER CONNECTION CLOSED ***');
 
         this.deps.commandManager.setGameClient(null);
@@ -104,7 +125,7 @@ export class GameClientNew extends Connection implements IGameClient {
         this.publishDisconnectedEvent();
     }
 
-    protected onError(err: Error): void {
+    private handleError(err: Error): void {
         Logger.error('GameClient', `*** GAME SERVER ERROR: ${err.message} ***`);
         this.state = GameState.ERROR;
         this.publishConnectionState(ConnectionPhase.ERROR);
@@ -112,7 +133,7 @@ export class GameClientNew extends Connection implements IGameClient {
         this.publishErrorEvent(err.message);
     }
 
-    protected onRawPacket(fullPacket: Buffer): void {
+    private handleRawPacket(fullPacket: Buffer): void {
         const encryptedBody = fullPacket.subarray(2);
         const body = this.crypt.decrypt(encryptedBody);
         const opcode = body[0]!;
@@ -264,10 +285,17 @@ export class GameClientNew extends Connection implements IGameClient {
         this.sendPacketRawBuffer(enterWorldPayload);
     }
 
-    sendPacket(packet: OutgoingGamePacket): void {
-        const body = packet.encode();
-        const encrypted = this.crypt.encrypt(body);
-        this.sendPacketRawBuffer(encrypted);
+    sendPacket(packet: OutgoingGamePacket): Result<void, Error> {
+        try {
+            const body = packet.encode();
+            const encrypted = this.crypt.encrypt(body);
+            this.sendPacketRawBuffer(encrypted);
+            return Result.ok(undefined);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            Logger.error('GameClient', `Failed to send packet: ${message}`);
+            return Result.err(new Error(`Failed to send packet: ${message}`));
+        }
     }
 
     private sendPacketRawBuffer(buffer: Buffer): void {
@@ -276,7 +304,28 @@ export class GameClientNew extends Connection implements IGameClient {
         const out = Buffer.allocUnsafe(totalLen);
         out.writeUInt16LE(totalLen, 0);
         buffer.copy(out, 2);
-        this.sendRaw(out);
+        this.connection.send(out);
+    }
+
+    /**
+     * Disconnect from game server
+     */
+    disconnect(): void {
+        this.connection.disconnect();
+    }
+
+    /**
+     * Get current connection state
+     */
+    getState(): GameState {
+        return this.state;
+    }
+
+    /**
+     * Check if client is connected
+     */
+    isConnected(): boolean {
+        return this.connection.isConnected();
     }
 
     // ============================================================================
