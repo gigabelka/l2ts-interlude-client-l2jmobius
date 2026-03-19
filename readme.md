@@ -36,6 +36,8 @@ This client is designed for the [L2J_Mobius CT_0_Interlude](https://gitlab.com/M
 - ✅ **Event Bus** — Typed event system for loose coupling
 - ✅ **Clean Architecture** — Domain-driven design with separation of concerns
 - ✅ **Dashboard** — Web UI for monitoring client state
+- ✅ **Dependency Injection** — Custom DI container with Result<T,E> monad
+- ✅ **Zod Validation** — Runtime configuration validation
 
 ---
 
@@ -87,6 +89,8 @@ L2_PROTOCOL=746                  # Interlude protocol version
 # API
 API_KEY=                         # API authentication key (empty = no auth)
 API_PORT=3000                    # API server port
+LOG_LEVEL=ERROR                  # Logging level
+AUTO_CONNECT_GAME=true           # Auto-connect on startup
 ```
 
 > **Note:** `.env` file is gitignored. Never commit your credentials!
@@ -131,6 +135,16 @@ npm test
 
 # Run tests in watch mode
 npm run test:watch
+
+# Run tests with coverage
+npm run test:coverage
+
+# Type checking
+npm run typecheck
+
+# Linting
+npm run lint
+npm run lint:fix
 ```
 
 ---
@@ -160,7 +174,6 @@ npm run export:data
 # Или пошагово:
 node scripts/export-xml.js        # Конвертация XML в database.json
 node scripts/normalize-database.js # Нормализация в удобную структуру
-node scripts/export-stats.js       # Альтернативный полный экспорт
 ```
 
 ### Результат
@@ -193,9 +206,12 @@ src/
 │   ├── middleware/        # Auth, rate limiting, request ID
 │   └── ws/                # WebSocket server for real-time events
 │
-├── core/                  # Core Architecture (Legacy)
-│   ├── EventBus.ts        # Typed EventEmitter for real-time events
-│   └── GameStateStore.ts  # Central state store (singleton)
+├── config/                # Configuration and DI container
+│   ├── config.ts          # Environment config with Zod validation
+│   └── di/                # Dependency Injection container
+│       ├── Container.ts   # DI container implementation
+│       ├── appContainer.ts # Singleton instance
+│       └── composition.ts # Service registration
 │
 ├── domain/                # Domain Layer (Clean Architecture)
 │   ├── entities/          # Character, Npc, Item (business objects)
@@ -213,10 +229,10 @@ src/
 │   │   ├── packets/       # DTOs (UserInfoPacket, NpcInfoPacket, etc.)
 │   │   ├── handlers/      # Strategy handlers
 │   │   └── PacketRegistry.ts  # Centralized packet registration
-│   └── integration/       # Adapters for legacy integration
+│   └── network/           # PacketSerializer, BufferPool
 │
 ├── network/               # TCP & Packet Layer
-│   ├── Connection.ts      # Abstract TCP client with L2 framing
+│   ├── Connection.ts      # TCP client with L2 framing
 │   ├── PacketReader.ts    # Binary reader (little-endian)
 │   └── PacketWriter.ts    # Binary writer (little-endian)
 │
@@ -227,12 +243,15 @@ src/
 │
 ├── login/                 # Login Server Phase
 │   ├── LoginClient.ts     # FSM-driven login client
+│   ├── LoginCrypt.ts      # Login crypto (Blowfish + XOR)
 │   └── packets/           # Login packets (incoming/outgoing)
 │
-└── game/                  # Game Server Phase
-    ├── GameClient.ts      # FSM-driven game client
-    ├── GameCrypt.ts       # XOR encryption
-    └── packets/           # Game packets (incoming/outgoing)
+├── game/                  # Game Server Phase
+│   ├── GameClient.ts      # FSM-driven game client
+│   ├── GameCrypt.ts       # XOR encryption (disabled for CT0)
+│   └── packets/           # Game packets (incoming/outgoing)
+│
+└── data/                  # Game data (items, NPCs, skills)
 ```
 
 ### Two-Phase Connection Model
@@ -253,7 +272,7 @@ IDLE → CONNECTING → WAIT_CRYPT_INIT → WAIT_CHAR_LIST →
 WAIT_CHAR_SELECTED → WAIT_USER_INFO → IN_GAME
 ```
 
-- **Encryption**: XOR encryption (can be disabled via CryptInit flag)
+- **Encryption**: XOR encryption (disabled via CryptInit flag for L2J Mobius CT0)
 
 ### Packet Processing Architecture
 
@@ -291,16 +310,27 @@ GET /api-docs        # API documentation (Scalar)
 
 #### Protected Endpoints
 
+**Connection**
+```bash
+GET  /api/v1/status              # Get connection status
+POST /api/v1/connect             # Connect to game
+POST /api/v1/disconnect          # Disconnect from game
+POST /api/v1/reconnect           # Reconnect to game
+```
+
 **Character**
 ```bash
 GET  /api/v1/character           # Get character state
 GET  /api/v1/character/stats     # Get character stats
 GET  /api/v1/character/skills    # Get character skills
+GET  /api/v1/character/buffs     # Get active buffs
 ```
 
 **Inventory**
 ```bash
 GET  /api/v1/inventory           # Get inventory contents
+POST /api/v1/inventory/use       # Use item
+POST /api/v1/inventory/drop      # Drop item
 ```
 
 **Target & Combat**
@@ -308,15 +338,18 @@ GET  /api/v1/inventory           # Get inventory contents
 GET  /api/v1/target              # Get current target
 POST /api/v1/target/set          # Set target { "objectId": 123 }
 POST /api/v1/target/clear        # Clear target
-POST /api/v1/combat/attack       # Attack target { "objectId": 123 }
-POST /api/v1/combat/use-skill    # Use skill { "skillId": 123, "targetId": 456 }
+POST /api/v1/target/next         # Target next NPC
+POST /api/v1/combat/attack       # Attack target
+POST /api/v1/combat/stop         # Stop attack
+POST /api/v1/combat/use-skill    # Use skill
 ```
 
 **Movement**
 ```bash
 POST /api/v1/move/to             # Move to position { "x": 83500, "y": 54000, "z": -1490 }
-POST /api/v1/move/to-target      # Move to target { "objectId": 123 }
 POST /api/v1/move/stop           # Stop movement
+GET  /api/v1/move/status         # Get movement status
+POST /api/v1/move/follow         # Follow target
 ```
 
 **Nearby Entities**
@@ -324,19 +357,20 @@ POST /api/v1/move/stop           # Stop movement
 GET  /api/v1/nearby/npcs?radius=600&attackable=true  # Get nearby NPCs
 GET  /api/v1/nearby/players                          # Get nearby players
 GET  /api/v1/nearby/items                            # Get dropped items
+POST /api/v1/pickup                                  # Pick up item
 ```
 
 **Chat**
 ```bash
-POST /api/v1/chat/say            # Say message { "message": "Hello" }
+POST /api/v1/chat/send           # Send message { "channel": "ALL", "message": "Hello" }
+GET  /api/v1/chat/history        # Get chat history
 ```
 
-**Connection**
+**Party**
 ```bash
-GET  /api/v1/status              # Get connection status
-POST /api/v1/connect             # Connect to game
-POST /api/v1/disconnect          # Disconnect from game
-POST /api/v1/reconnect           # Reconnect to game
+GET  /api/v1/party               # Get party info
+POST /api/v1/party/invite        # Invite to party
+POST /api/v1/party/leave         # Leave party
 ```
 
 ### WebSocket API
@@ -362,6 +396,18 @@ ws.onmessage = (event) => {
 
 **Available Channels**: `system`, `character`, `combat`, `chat`, `world`, `movement`, `party`, `inventory`
 
+**Event Format:**
+```json
+{
+  "type": "character.stats_changed",
+  "channel": "character",
+  "data": {
+    "hp": { "current": 1100, "max": 1500, "delta": -100 }
+  },
+  "timestamp": "2025-03-14T12:00:00.000Z"
+}
+```
+
 ---
 
 ## 📝 Adding New Packets
@@ -373,26 +419,16 @@ To add support for a new incoming packet, follow these steps:
 Create a new file in `src/infrastructure/protocol/game/packets/`:
 
 ```typescript
-// src/infrastructure/protocol/game/packets/MyNewPacket.ts
+import type { IPacketReader, IIncomingPacket } from '../../../../application/ports';
 
-import type { IPacketReader } from '../../../../application/ports';
-import type { IIncomingPacket } from '../../../../application/ports';
-
-/**
- * Данные пакета MyNewPacket
- */
 export interface MyNewData {
     objectId: number;
     value: number;
     name: string;
 }
 
-/**
- * Пакет MyNewPacket (0xXX)
- * Описание назначения пакета
- */
 export class MyNewPacket implements IIncomingPacket {
-    readonly opcode = 0xXX;  // Замените на реальный opcode
+    readonly opcode = 0xXX;
     private data!: MyNewData;
 
     decode(reader: IPacketReader): this {
@@ -415,51 +451,42 @@ export class MyNewPacket implements IIncomingPacket {
 Create a handler in `src/infrastructure/protocol/game/handlers/`:
 
 ```typescript
-// src/infrastructure/protocol/game/handlers/MyNewHandler.ts
-
 import { BasePacketHandlerStrategy } from '../GamePacketProcessor';
 import type { PacketContext, IPacketReader } from '../../../../application/ports';
 import type { IEventBus } from '../../../../application/ports';
 import type { ICharacterRepository } from '../../../../domain/repositories';
 import { MyNewPacket } from '../packets/MyNewPacket';
-import { Result } from '../../../../shared/result';
 
 export class MyNewHandler extends BasePacketHandlerStrategy<MyNewPacket> {
     constructor(
         eventBus: IEventBus,
         private characterRepo: ICharacterRepository
     ) {
-        super(0xXX, eventBus); // Должен совпадать с opcode в пакете
+        super(0xXX, eventBus);
     }
 
     protected canHandleInState(state: string): boolean {
-        // Обрабатываем только в игре
         return state === 'IN_GAME';
     }
 
     handle(context: PacketContext, reader: IPacketReader): void {
-        // Декодируем пакет
         const packet = new MyNewPacket();
         packet.decode(reader);
         const data = packet.getData();
 
-        // Бизнес-логика: обновляем состояние
-        const character = this.characterRepo.get();
-        if (character && character.id.value === data.objectId) {
-            // Обновляем персонажа
-            this.characterRepo.update((char) => {
-                // ... логика обновления
-                return char;
-            });
+        // Update repository
+        this.characterRepo.update((char) => {
+            // ... update logic
+            return char;
+        });
 
-            // Публикуем событие
-            this.eventBus.publish({
-                type: 'character.my_event',
-                channel: 'character',
-                data: { value: data.value },
-                timestamp: new Date().toISOString()
-            });
-        }
+        // Publish event
+        this.eventBus.publish({
+            type: 'character.my_event',
+            channel: 'character',
+            data: { value: data.value },
+            timestamp: new Date().toISOString()
+        });
     }
 }
 ```
@@ -478,29 +505,10 @@ const PACKET_REGISTRY: PacketConfig[] = [
         opcode: 0xXX,
         packetClass: MyNewPacket,
         handlerClass: MyNewHandler,
-        repositories: ['character'], // или ['world'], ['inventory'], и т.д.
-        description: 'MyNewPacket - описание пакета',
+        repositories: ['character'],
+        description: 'MyNewPacket - description',
     },
 ];
-```
-
-### 4. Add Event Type (Optional)
-
-If your packet emits new events, add them to `src/core/EventBus.ts`:
-
-```typescript
-export interface MyNewEvent extends BaseEvent {
-    type: 'character.my_event';
-    channel: 'character';
-    data: {
-        value: number;
-    };
-}
-
-// Add to GameEvent union type
-export type GameEvent = 
-    | ... 
-    | MyNewEvent;
 ```
 
 That's it! The packet will be automatically registered and processed when received.
@@ -522,6 +530,7 @@ That's it! The packet will be automatically registered and processed when receiv
 npm test              # Run all tests once
 npm run test:watch    # Watch mode
 npm run test:ui       # Vitest UI
+npm run test:coverage # Coverage report
 ```
 
 ### Code Style
@@ -537,8 +546,9 @@ npm run lint:fix      # Fix auto-fixable errors
 
 ## 📖 Documentation
 
-- **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)** — Technical developer documentation
+- **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)** — Technical developer documentation (Russian)
 - **[docs/client_server_protocol.md](docs/client_server_protocol.md)** — Protocol specification (source of truth)
+- **[AGENTS.md](AGENTS.md)** — Guide for AI coding agents
 
 ---
 
@@ -547,8 +557,6 @@ npm run lint:fix      # Fix auto-fixable errors
 - **GitHub**: https://github.com/gigabelka/l2ts-interlude-client-l2jmobius
 - **Target Server**: https://gitlab.com/MobiusDevelopment/L2J_Mobius
 - **Reference Client**: https://github.com/npetrovski/l2js-client
-- **YouTube**: https://youtube.com/@lineage2interludeclientforl2jm
-- **Telegram**: t.me/Lineage2InterludeClientForL2jm
 
 ---
 

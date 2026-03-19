@@ -12,6 +12,7 @@ This is a **headless Lineage 2 client** for L2J Mobius CT_0_Interlude servers. I
 
 **Target Server:** L2J_Mobius CT_0_Interlude (Protocol 746)
 **Node.js:** 24.14.0
+**Version:** 0.4.9
 
 ## Common Commands
 
@@ -56,6 +57,15 @@ The project follows **Clean Architecture** principles with a layered approach:
 
 Uses a custom DI container (`config/di/`) with lazy initialization. All dependencies are resolved through the container using DI_TOKENS.
 
+Key tokens:
+- `DI_TOKENS.EventBus` - Event bus for domain events
+- `DI_TOKENS.SystemEventBus` - System event bus
+- `DI_TOKENS.CharacterRepository` - Character state repository
+- `DI_TOKENS.WorldRepository` - World entities repository
+- `DI_TOKENS.InventoryRepository` - Inventory repository
+- `DI_TOKENS.PacketProcessor` - Game packet processor
+- `DI_TOKENS.PacketSerializer` - Outgoing packet serializer
+
 ### Two-Phase Connection Model
 
 The client uses FSM-driven clients for both connection phases:
@@ -69,12 +79,18 @@ The client uses FSM-driven clients for both connection phases:
 #### Phase 2: Game Server (GameClient)
 
 - **Flow:** ProtocolVersion (0x00) → CryptInit (0x00) → AuthRequest (0x08) → CharSelectInfo (0x13) → CharacterSelected (0x0D) → CharSelected (0x15) → (0x9D + 0xD0-08-00 + EnterWorld 0x03) → UserInfo (0x04) → IN_GAME (ping/pong)
-- **Crypto:** Encryption is disabled via flag sent in CryptInit.
+- **Crypto:** Encryption is disabled via flag sent in CryptInit (L2J Mobius CT0 specific)
 - **State Enum:** `GameState` (IDLE, CONNECTING, WAIT_CRYPT_INIT, WAIT_CHAR_LIST, WAIT_CHAR_SELECTED, WAIT_USER_INFO, IN_GAME, ERROR)
 
 ### Event-Driven Architecture
 
 Uses typed EventBus for loose coupling between components. Events are published from packet handlers and consumed by API layers.
+
+Domain events include:
+- `CharacterEvents` - Character state changes, level up, buffs
+- `WorldEvents` - NPC spawn/despawn, items, combat
+- `ConnectionEvents` - Connection state changes
+- `ChatEvents` - Chat messages
 
 ### External APIs
 
@@ -89,43 +105,53 @@ Uses typed EventBus for loose coupling between components. Events are published 
 ```
 src/
 ├── index.ts                    # Entry point with DI container bootstrap
+├── config.ts                   # Environment configuration (Zod validation)
 ├── config/                     # Configuration and DI container
+│   ├── di/
+│   │   ├── Container.ts        # DI container with Result<T,E>
+│   │   ├── appContainer.ts     # Singleton instance
+│   │   └── composition.ts      # Service registration
+│   └── ...
 ├── api/                        # REST API + WebSocket server
-│   ├── routes/                # HTTP endpoints (character, combat, movement)
-│   ├── middleware/            # Authentication, rate limiting
+│   ├── ApiServer.ts           # Express server
+│   ├── routes/                # HTTP endpoints
+│   ├── middleware/            # Auth, rate limiting
 │   └── ws/                    # WebSocket server
 ├── domain/                     # Business logic layer
-│   ├── entities/              # Character, Npc, Item domain entities
-│   ├── value-objects/         # Position, Vitals, Stats immutable objects
-│   ├── events/                # Domain events (typed)
+│   ├── entities/              # Character, Npc, Item
+│   ├── value-objects/         # Position, Vitals, Stats
+│   ├── events/                # Domain events
 │   └── repositories/          # Repository interfaces
 ├── application/                # Application service layer
-│   └── ports/                 # Interface definitions (IEventBus, etc.)
+│   └── ports/                 # Interface definitions
 ├── infrastructure/             # Implementation layer
-│   ├── persistence/           # In-memory repository implementations
+│   ├── persistence/           # In-memory repositories
 │   ├── event-bus/             # EventBus implementation
-│   ├── protocol/game/         # Packet processing with Factory+Strategy patterns
-│   └── integration/           # Legacy integration adapters
-├── ui/                         # Dashboard UI components
-├── logger/                     # Logging with hex dump utilities
-├── network/                    # TCP connection with L2 packet framing
-├── crypto/                     # Blowfish, XOR, RSA implementations
-├── login/                      # Login server client + packets
-│   ├── LoginClient.ts
-│   ├── LoginCrypt.ts
-│   └── packets/               # incoming/outgoing login packets
-├── game/                       # Game server client + packets
-│   ├── GameClient.ts
+│   ├── protocol/game/         # Packet processing
+│   └── network/               # PacketSerializer, BufferPool
+├── network/                    # TCP & Packet Layer
+│   ├── Connection.ts          # TCP client
+│   ├── PacketReader.ts        # Binary reader
+│   └── PacketWriter.ts        # Binary writer
+├── crypto/                     # Encryption Layer
+│   ├── BlowfishEngine.ts      # Blowfish ECB
+│   ├── RSACrypt.ts            # RSA encryption
+│   └── NewCrypt.ts            # Blowfish wrapper
+├── login/                      # Login server client
+│   ├── LoginClient.ts         # FSM login client
+│   ├── LoginCrypt.ts          # Login crypto
+│   └── packets/               # Login packets
+├── game/                       # Game server client
+│   ├── GameClient.ts          # FSM game client
 │   ├── GameCrypt.ts           # XOR encryption
-│   └── packets/               # incoming/outgoing game packets
-└── data/                       # Exported game data (items, NPCs, skills)
-    └── export/                # JSON data from L2J Mobius XML
+│   └── packets/               # Game packets
+└── data/                       # Game data (items, NPCs, skills)
 ```
 
 ## Key Implementation Details
 
 - **Packet framing:** Each L2 packet starts with uint16LE length (including the 2-byte header)
-- **Two crypto systems:** Login uses Blowfish ECB (NewCrypt → BlowfishEngine), Game uses XOR (GameCrypt)
+- **Two crypto systems:** Login uses Blowfish ECB (NewCrypt → BlowfishEngine), Game uses XOR (GameCrypt, disabled for CT0)
 - **RSA encryption:** 1024-bit with NO_PADDING, modulus must be unscrambled first using ScrambledRSAKey
 - **Packet format types:** C=uint8, H=uint16, D=int32, Q=int64, F=double, S=UTF-16LE null-terminated string
 - **Game Server ProtocolVersion:** Uses opcode 0x00 (NOT 0x0B), confirmed from working Wireshark capture
@@ -143,6 +169,7 @@ L2_USERNAME=your_login           # Game account login
 L2_PASSWORD=your_password        # Game account password
 L2_SERVER_ID=2                   # Server ID from server list
 L2_CHAR_SLOT=0                   # Character slot (0-based index)
+L2_PROTOCOL=746                  # Interlude protocol version
 
 # API
 API_KEY=                         # API authentication key (empty = no auth)
@@ -153,7 +180,7 @@ LOG_LEVEL=ERROR                  # DEBUG, INFO, WARN, ERROR, SILENT
 AUTO_CONNECT_GAME=true           # Auto-connect on startup
 ```
 
-Copy `.env.example` to `.env` and configure your settings.
+Copy `.env.example` to `.env` and configure your settings. Configuration is validated using Zod schemas at startup.
 
 ## Data Export
 
@@ -199,9 +226,43 @@ The project uses Factory + Strategy pattern for packet processing:
 1. **Create Packet DTO** in `infrastructure/protocol/game/packets/` with `decode()` method
 2. **Create Handler** in `infrastructure/protocol/game/handlers/` extending `BasePacketHandlerStrategy`
 3. **Register in PacketRegistry** - add to `PACKET_REGISTRY` array with opcode mapping
-4. **Add Event Types** in `core/EventBus.ts` if emitting new events
+4. **Add Event Types** in `domain/events/` if emitting new events
 
 Handlers receive dependencies via DI (characterRepo, worldRepo, eventBus) and should:
 - Check `canHandleInState()` for valid game states
 - Update domain repositories
 - Publish typed events via EventBus
+
+## WebSocket Channels
+
+Available subscription channels:
+- `system` - Connection status, errors
+- `character` - HP/MP/CP changes, level up, buffs
+- `combat` - Attacks, damage, deaths
+- `chat` - Chat messages
+- `world` - NPC spawn/despawn, items
+- `movement` - Position changes
+- `party` - Party events
+- `inventory` - Inventory changes
+
+## Testing
+
+- **Framework:** Vitest
+- **Unit tests:** Domain entities, value objects
+- **Integration tests:** Packet encoding/decoding, API endpoints
+- **Performance tests:** BufferPool, CacheManager
+
+Run tests with:
+```bash
+npm test              # Run once
+npm run test:watch    # Watch mode
+npm run test:coverage # With coverage
+```
+
+## Code Style
+
+- One class/interface per file
+- PascalCase for classes/interfaces, camelCase for methods
+- Use `readonly` for immutable properties
+- Prefer interfaces over type aliases
+- Comments in Russian (domain language)

@@ -7,7 +7,7 @@ This file provides essential information for AI coding agents working on this pr
 **L2 Headless Client** is a TypeScript/Node.js bot client for Lineage 2 Interlude game servers. It connects to L2J Mobius CT_0_Interlude servers, authenticates, enters the game world, and provides a REST + WebSocket API for external control.
 
 - **Project Name:** `l2ts-interlude-client-l2jmobius`
-- **Version:** 0.4.8
+- **Version:** 0.4.9
 - **Target Server:** L2J_Mobius CT_0_Interlude (Protocol 746)
 - **Node.js Version:** >= 24.14.0
 - **License:** MIT
@@ -26,7 +26,7 @@ This file provides essential information for AI coding agents working on this pr
 | API Framework | Express.js 5.x |
 | WebSocket | ws library |
 | Validation | Zod 4.3.6 |
-| DI Container | Custom implementation |
+| DI Container | Custom implementation with Result<T,E> |
 
 ## Architecture Overview
 
@@ -34,7 +34,7 @@ The project follows **Clean Architecture** principles with clear separation of c
 
 ```
 src/
-├── index.ts                    # Entry point
+├── index.ts                    # Entry point with DI container bootstrap
 ├── config.ts                   # Environment configuration (Zod validation)
 ├── config/di/                  # Dependency Injection container
 │   ├── Container.ts            # DI container implementation with Result<T,E>
@@ -87,16 +87,15 @@ src/
 │   ├── packets/outgoing/       # Outgoing packet builders
 │   ├── protocol/handlers/      # Login packet handlers
 │   ├── protocol/LoginPacketProcessor.ts
-│   ├── session/SessionManager.ts
-│   └── types.ts
+│   └── session/SessionManager.ts
 │
 ├── game/                       # Game Server Phase
 │   ├── GameClient.ts           # FSM-driven game client
-│   ├── GameCrypt.ts            # XOR encryption
+│   ├── GameCrypt.ts            # XOR encryption (disabled for CT0)
 │   ├── GameCommandManager.ts   # Command manager singleton
 │   ├── GameState.ts            # Game state definitions
 │   ├── packets/outgoing/       # Outgoing game packets (MoveToLocation, AttackRequest, etc.)
-│   └── IGamClient.ts
+│   └── IGameClient.ts
 │
 ├── data/                       # Game data
 │   ├── ItemDatabase.ts
@@ -135,7 +134,7 @@ WAIT_SERVER_LIST → WAIT_PLAY_OK → DONE
 IDLE → CONNECTING → WAIT_CRYPT_INIT → WAIT_CHAR_LIST → 
 WAIT_CHAR_SELECTED → WAIT_USER_INFO → IN_GAME
 ```
-- **Encryption:** XOR (can be disabled via CryptInit flag)
+- **Encryption:** XOR (disabled via CryptInit flag=0 for L2J Mobius CT0)
 
 ## Packet Format
 
