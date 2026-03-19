@@ -1,7 +1,10 @@
 import { beforeAll, afterAll } from 'vitest';
 import { MockL2Server } from './utils/mockServer';
-import { architectureBridge } from '../src/infrastructure/integration/NewArchitectureBridge';
-import { GameCommandManager } from '../src/game/GameCommandManager';
+import { getContainer, resetContainer } from '../src/config/di/appContainer';
+import { initGameCommandManager, resetGameCommandManager } from '../src/game/GameCommandManager';
+import { DI_TOKENS } from '../src/config/di/Container';
+import type { ICharacterRepository, IWorldRepository } from '../src/domain/repositories';
+import type { IEventBus } from '../src/application/ports';
 import { TEST_CONFIG } from './config';
 
 /**
@@ -9,21 +12,28 @@ import { TEST_CONFIG } from './config';
  * Runs once before all tests
  */
 beforeAll(async () => {
-    // Initialize architecture
-    architectureBridge.initialize('NEW');
+    // Reset container for clean state
+    resetContainer();
     
     // Get container and reset repositories
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const charRepo = container.resolve('CharacterRepository');
     const worldRepo = container.resolve('WorldRepository');
     const invRepo = container.resolve('InventoryRepository');
+    const eventBus = container.resolve('EventBus');
     
     if (charRepo.isOk()) charRepo.getOrThrow().reset();
     if (worldRepo.isOk()) worldRepo.getOrThrow().reset();
     if (invRepo.isOk()) invRepo.getOrThrow().reset();
     
-    // Unregister any existing game client
-    GameCommandManager.setGameClient(null);
+    // Initialize GameCommandManager with dependencies for tests
+    if (charRepo.isOk() && worldRepo.isOk() && eventBus.isOk()) {
+        initGameCommandManager({
+            characterRepo: charRepo.getOrThrow(),
+            worldRepo: worldRepo.getOrThrow(),
+            eventBus: eventBus.getOrThrow(),
+        });
+    }
 
     // Set test environment
     process.env.NODE_ENV = 'test';
@@ -39,7 +49,7 @@ beforeAll(async () => {
  */
 afterAll(async () => {
     // Final cleanup
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const charRepo = container.resolve('CharacterRepository');
     const worldRepo = container.resolve('WorldRepository');
     const invRepo = container.resolve('InventoryRepository');
@@ -48,7 +58,7 @@ afterAll(async () => {
     if (worldRepo.isOk()) worldRepo.getOrThrow().reset();
     if (invRepo.isOk()) invRepo.getOrThrow().reset();
     
-    GameCommandManager.setGameClient(null);
+    resetGameCommandManager();
 
     console.log('Test environment cleaned up');
 });
@@ -68,7 +78,7 @@ export function setupPacketTest() {
 
     beforeEach(async () => {
         // Reset state before each test
-        const container = architectureBridge.getContainer();
+        const container = getContainer();
         const charRepo = container.resolve('CharacterRepository');
         const worldRepo = container.resolve('WorldRepository');
         const invRepo = container.resolve('InventoryRepository');
@@ -87,7 +97,7 @@ export function setupPacketTest() {
         await mockServer.stop();
         
         // Clean up state
-        const container = architectureBridge.getContainer();
+        const container = getContainer();
         const charRepo = container.resolve('CharacterRepository');
         const worldRepo = container.resolve('WorldRepository');
         const invRepo = container.resolve('InventoryRepository');
@@ -110,7 +120,7 @@ export function setupApiTest() {
 
     beforeEach(async () => {
         // Reset state before each test
-        const container = architectureBridge.getContainer();
+        const container = getContainer();
         const charRepo = container.resolve('CharacterRepository');
         const worldRepo = container.resolve('WorldRepository');
         const invRepo = container.resolve('InventoryRepository');
@@ -129,7 +139,7 @@ export function setupApiTest() {
         await mockServer.stop();
         
         // Clean up state
-        const container = architectureBridge.getContainer();
+        const container = getContainer();
         const charRepo = container.resolve('CharacterRepository');
         const worldRepo = container.resolve('WorldRepository');
         const invRepo = container.resolve('InventoryRepository');
@@ -159,7 +169,7 @@ export function waitForEvent<T>(
     timeout: number = TEST_CONFIG.timeouts.response
 ): Promise<T> {
     return new Promise((resolve, reject) => {
-        const container = architectureBridge.getContainer();
+        const container = getContainer();
         const eventBusResult = container.resolve('EventBus');
         
         if (eventBusResult.isErr()) {

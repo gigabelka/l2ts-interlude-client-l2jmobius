@@ -4,7 +4,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
-import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { ICharacterRepository, IInventoryRepository } from '../../domain/repositories';
 import { GameCommandManager } from '../../game/GameCommandManager';
@@ -21,7 +21,7 @@ const router = Router();
  *   - format: 'full' | 'compact' | 'stats' (default: 'full')
  */
 router.get('/', (req: Request, res: Response) => {
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
     const invRepo = container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
 
@@ -163,7 +163,7 @@ router.get('/', (req: Request, res: Response) => {
  * Returns equipped items only
  */
 router.get('/equipment', (req: Request, res: Response) => {
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const invRepo = container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
 
     const equipped = invRepo.getEquippedItems();
@@ -211,7 +211,7 @@ router.get('/search', (req: Request, res: Response) => {
         return;
     }
 
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const invRepo = container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
     const state = invRepo.getState();
 
@@ -262,7 +262,7 @@ router.post('/use', (req: Request, res: Response) => {
         return;
     }
 
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const invRepo = container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
 
     // Validate item exists in inventory
@@ -371,7 +371,7 @@ router.post('/drop', (req: Request, res: Response) => {
         }
     }
 
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const invRepo = container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
     const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
 

@@ -1,5 +1,9 @@
 // scripts/normalize-database.js
 // Нормализация database.json в удобную структуру для экспорта
+//
+// Требует предварительного запуска export-xml.js для создания database.json.
+// Этот скрипт читает: src/data/stats/database.json
+// Результат сохраняется в: src/data/export/
 
 const fs = require('fs');
 const path = require('path');

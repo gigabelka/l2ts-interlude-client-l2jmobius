@@ -4,7 +4,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
-import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { ICharacterRepository, IWorldRepository } from '../../domain/repositories';
 import { NpcDatabase } from '../../data/NpcDatabase';
@@ -16,7 +16,7 @@ const router = Router();
  * Returns NPCs in visible range.
  */
 router.get('/npcs', (req: Request, res: Response) => {
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
     const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
 
@@ -160,7 +160,7 @@ router.get('/npc/search', (req: Request, res: Response) => {
  * Returns players in visible range.
  */
 router.get('/players', (req: Request, res: Response) => {
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
 
     const character = charRepo.get();
@@ -203,7 +203,7 @@ router.get('/players', (req: Request, res: Response) => {
  * Returns items on ground in visible range.
  */
 router.get('/items', (req: Request, res: Response) => {
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
     const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
 

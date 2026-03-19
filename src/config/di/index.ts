@@ -14,11 +14,5 @@ export type {
 // Composition Root - настройка DI контейнера
 export { createContainer } from './composition';
 
-import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
-
-/**
- * Получить глобальный DI контейнер
- */
-export function getContainer() {
-    return architectureBridge.getContainer();
-}
+// Application container singleton
+export { getContainer, resetContainer } from './appContainer';

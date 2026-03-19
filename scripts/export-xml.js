@@ -1,9 +1,15 @@
+// scripts/export-xml.js
+// Конвертация XML-статов из сервера L2J Mobius в JSON базу данных
+//
+// Перед запуском: скопируйте папку data/stats из сервера L2J_Mobius CT_0 Interlude
+// в корень проекта (папка stats/ рядом с package.json).
+// Скачать сервер: https://gitlab.com/MobiusDevelopment/L2J_Mobius/-/tree/master/L2J_Mobius_CT_0_Interlude
+
 const fs = require('fs');
 const path = require('path');
 const xml2js = require('xml2js');
 
 // --- НАСТРОЙКИ ПУТЕЙ ---
-// Укажи путь к папке, которую нужно рекурсивно обойти (например, папка сервера со статами)
 const INPUT_DIR = path.join(__dirname, '../stats');
 
 // Укажи путь, куда сохранить готовую базу данных

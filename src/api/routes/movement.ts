@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { GameCommandManager } from '../../game/GameCommandManager';
 import { moveRateLimitMiddleware } from '../middleware/rateLimiter';
 import { Logger } from '../../logger/Logger';
-import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { ICharacterRepository, IWorldRepository } from '../../domain/repositories';
 
@@ -10,7 +10,7 @@ import type { ICharacterRepository, IWorldRepository } from '../../domain/reposi
 const router = Router();
 
 // Repository accessors
-const container = architectureBridge.getContainer();
+const container = getContainer();
 const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
 const getWorldRepo = () => container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
 

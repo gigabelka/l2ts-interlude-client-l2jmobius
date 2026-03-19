@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GameClientNew } from '../../src/game/GameClient';
-import { architectureBridge } from '../../src/infrastructure/integration/NewArchitectureBridge';
+import { getContainer, resetContainer } from '../../src/config/di/appContainer';
 import { GameState } from '../../src/game/GameState';
 import { SessionData } from '../../src/login/types';
 
@@ -22,10 +22,10 @@ describe('GameClient Selection Flow', () => {
     };
 
     beforeEach(async () => {
-        // Initialize architecture in NEW mode (Repositories + EventBus)
-        architectureBridge.initialize('NEW');
+        // Reset container for clean state
+        resetContainer();
 
-        const container = architectureBridge.getContainer();
+        const container = getContainer();
         const deps = {
             eventBus: container.resolve(DI_TOKENS.EventBus).getOrThrow(),
             packetProcessor: container.resolve(DI_TOKENS.PacketProcessor).getOrThrow(),

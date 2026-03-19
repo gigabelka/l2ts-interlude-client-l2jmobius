@@ -36,9 +36,6 @@ import {
     configurePacketProcessor,
 } from '../../infrastructure/protocol';
 
-// Legacy Adapter
-import { GameStateStoreAdapter } from '../../infrastructure/adapters/GameStateStoreAdapter';
-
 /**
  * Создать и настроить DI контейнер
  */
@@ -123,23 +120,6 @@ export function createContainer(): Container {
             return processor;
         },
         false // transient
-    );
-
-    // ============================================================================
-    // Legacy Adapter (GameStateStore Bridge)
-    // ============================================================================
-
-    container.register<GameStateStoreAdapter>(
-        DI_TOKENS.GameStateStore,
-        (c) => {
-            const charRepo = c.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
-            const worldRepo = c.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
-            const invRepo = c.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
-            const eventBus = c.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
-            
-            return new GameStateStoreAdapter(charRepo, worldRepo, invRepo, eventBus);
-        },
-        true // singleton
     );
 
     return container;

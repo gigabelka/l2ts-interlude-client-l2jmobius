@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { IConnectionRepository } from '../../domain/repositories';
 import { ConnectionPhase } from '../../domain/repositories/IConnectionRepository';
@@ -7,7 +7,7 @@ import { ConnectionPhase } from '../../domain/repositories/IConnectionRepository
 const router = Router();
 
 // Repository accessors
-const container = architectureBridge.getContainer();
+const container = getContainer();
 const getConnectionRepo = () => container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
 
 /**

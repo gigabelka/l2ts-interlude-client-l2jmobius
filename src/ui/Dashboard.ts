@@ -4,7 +4,7 @@
  * @module ui/DashboardNew
  */
 
-import { architectureBridge } from "../infrastructure/integration/NewArchitectureBridge";
+import { getContainer } from "../config/di/appContainer";
 import { DI_TOKENS } from "../config/di/Container";
 import type { IEventBus } from "../application/ports";
 import type {
@@ -94,7 +94,7 @@ export class Dashboard {
    * Подписаться на события
    */
   private subscribeToEvents(): void {
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const eventBus = container
       .resolve<IEventBus>(DI_TOKENS.EventBus)
       .getOrThrow();
@@ -169,7 +169,7 @@ export class Dashboard {
     this.lastRender = now;
 
     // Получаем данные из репозиториев
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const charRepo = container
       .resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository)
       .getOrThrow();

@@ -5,14 +5,14 @@ import { GameClientNew } from '../../game/GameClient';
 import { Logger } from '../../logger/Logger';
 import { CONFIG } from '../../config';
 import type { SessionData } from '../../login/types';
-import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { ICharacterRepository, IWorldRepository, IInventoryRepository, IConnectionRepository } from '../../domain/repositories';
 import { ConnectionPhase } from '../../domain/repositories/IConnectionRepository';
 import type { IEventBus, IPacketProcessor } from '../../application/ports';
 
 // Repository accessors
-const container = architectureBridge.getContainer();
+const container = getContainer();
 const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
 const getWorldRepo = () => container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
 const getInventoryRepo = () => container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
@@ -73,6 +73,7 @@ function createGameSession(overrideConfig?: Partial<LoginConfig>): void {
                 worldRepo: getWorldRepo(),
                 inventoryRepo: getInventoryRepo(),
                 connectionRepo,
+                commandManager: GameCommandManager,
             });
             activeGameClient.start();
         },

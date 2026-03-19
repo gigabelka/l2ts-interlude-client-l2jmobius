@@ -1,5 +1,9 @@
 // scripts/export-stats.js
 // Полный экспорт всех данных из stats в нормализованный вид
+//
+// Перед запуском: скопируйте папку data/stats из сервера L2J_Mobius CT_0 Interlude
+// в корень проекта (папка stats/ рядом с package.json).
+// Скачать сервер: https://gitlab.com/MobiusDevelopment/L2J_Mobius/-/tree/master/L2J_Mobius_CT_0_Interlude
 
 const { execSync } = require('child_process');
 const fs = require('fs');

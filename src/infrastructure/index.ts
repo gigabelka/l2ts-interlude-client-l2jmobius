@@ -35,19 +35,4 @@ export {
 } from './protocol/game';
 
 // Adapters
-export {
-    GameStateStoreAdapter,
-    type LegacyPosition,
-    type LegacyHpMpCp,
-    type LegacyCharacterState,
-    type LegacyNpcInfo,
-    type LegacyInventoryItem,
-    type LegacyInventoryState,
-} from './adapters';
-
-// Integration
-export {
-    NewArchitectureBridge,
-    architectureBridge,
-    type ArchitectureMode,
-} from './integration/NewArchitectureBridge';
+// (empty - GameStateStoreAdapter removed as dead code)

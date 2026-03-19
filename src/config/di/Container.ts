@@ -208,8 +208,6 @@ export const DI_TOKENS = {
     PacketFactory: Symbol('PacketFactory'),
     PacketProcessor: Symbol('PacketProcessor'),
 
-    // Legacy Adapters
-    GameStateStore: Symbol('GameStateStore'),
 
     // Services
     CharacterService: Symbol('CharacterService'),

@@ -6,8 +6,6 @@
 
 import type { IGameClient } from './IGameClient';
 import { Logger } from '../logger/Logger';
-import { architectureBridge } from '../infrastructure/integration/NewArchitectureBridge';
-import { DI_TOKENS } from '../config/di/Container';
 import type { ICharacterRepository, IWorldRepository } from '../domain/repositories';
 import type { IEventBus } from '../application/ports';
 import { Position } from '../domain/value-objects';
@@ -16,11 +14,22 @@ import { Position } from '../domain/value-objects';
 import { MoveToLocation, AttackRequest, Action, RequestSocialAction, Say2, ChatType, ChangeWaitType2, UseSkill, UseItem, DropItem, RequestJoinParty } from './packets/outgoing';
 
 /**
+ * Зависимости для GameCommandManager
+ */
+export interface GameCommandManagerDeps {
+    characterRepo: ICharacterRepository;
+    worldRepo: IWorldRepository;
+    eventBus: IEventBus;
+}
+
+/**
  * GameCommandManager - Singleton для отправки игровых команд из API
  * Использует новую архитектуру (Repositories + EventBus)
  */
-class GameCommandManagerClass {
+export class GameCommandManagerClass {
     private gameClient: IGameClient | null = null;
+
+    constructor(private deps: GameCommandManagerDeps) {}
 
     /**
      * Регистрация активного GameClient
@@ -38,18 +47,14 @@ class GameCommandManagerClass {
      * Проверка готовности (в игре)
      */
     isReady(): boolean {
-        const container = architectureBridge.getContainer();
-        const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
-        return this.gameClient !== null && charRepo.exists();
+        return this.gameClient !== null && this.deps.characterRepo.exists();
     }
 
     /**
      * Получить текущую позицию персонажа
      */
     getPosition(): { x: number; y: number; z: number } | null {
-        const container = architectureBridge.getContainer();
-        const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
-        const char = charRepo.get();
+        const char = this.deps.characterRepo.get();
         return char ? { x: char.position.x, y: char.position.y, z: char.position.z } : null;
     }
 
@@ -73,13 +78,10 @@ class GameCommandManagerClass {
             Logger.info('GameCommandManager', `MoveTo: ${x}, ${y}, ${z}`);
 
             // Обновляем позицию через репозиторий
-            const container = architectureBridge.getContainer();
-            const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
-            const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
-            const char = charRepo.get();
+            const char = this.deps.characterRepo.get();
 
             if (char) {
-                charRepo.update((c) => {
+                this.deps.characterRepo.update((c) => {
                     const newPos = Position.create({ x, y, z, heading: c.position.heading });
                     if (newPos.isOk()) {
                         c.updatePosition(
@@ -92,7 +94,7 @@ class GameCommandManagerClass {
                 });
 
                 // Публикуем событие
-                eventBus.publish({
+                this.deps.eventBus.publish({
                     type: 'movement.position_changed',
                     channel: 'movement',
                     payload: {
@@ -132,15 +134,12 @@ class GameCommandManagerClass {
             Logger.info('GameCommandManager', `Attack: ${objectId}, shift=${shiftClick}`);
 
             // Обновляем боевое состояние
-            const container = architectureBridge.getContainer();
-            const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
-            const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
-            const char = charRepo.get();
+            const char = this.deps.characterRepo.get();
 
             if (char) {
                 char.setInCombat(true);
 
-                eventBus.publish({
+                this.deps.eventBus.publish({
                     type: 'combat.attack_sent',
                     channel: 'combat',
                     payload: {
@@ -239,13 +238,10 @@ class GameCommandManagerClass {
             Logger.info('GameCommandManager', `Chat [${chatType}]: ${message.substring(0, 50)}`);
 
             // Публикуем событие
-            const container = architectureBridge.getContainer();
-            const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
-            const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
-            const char = charRepo.get();
+            const char = this.deps.characterRepo.get();
 
             if (char) {
-                eventBus.publish({
+                this.deps.eventBus.publish({
                     type: 'chat.message',
                     channel: 'chat',
                     payload: {
@@ -276,11 +272,7 @@ class GameCommandManagerClass {
         }
 
         // Ищем предмет в мире
-        const container = architectureBridge.getContainer();
-        const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
-        const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
-
-        const item = worldRepo.getItem(objectId);
+        const item = this.deps.worldRepo.getItem(objectId);
 
         if (!item) {
             Logger.warn('GameCommandManager', `Item ${objectId} not found`);
@@ -294,7 +286,7 @@ class GameCommandManagerClass {
             Logger.info('GameCommandManager', `Moving to pickup: ${item.name} (${objectId}) at ${item.position.x},${item.position.y},${item.position.z}`);
 
             // Публикуем событие
-            eventBus.publish({
+            this.deps.eventBus.publish({
                 type: 'world.item_picking_up',
                 channel: 'world',
                 payload: {
@@ -327,14 +319,11 @@ class GameCommandManagerClass {
             return false;
         }
 
-        const container = architectureBridge.getContainer();
-        const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
-        const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
-        const char = charRepo.get();
+        const char = this.deps.characterRepo.get();
 
         if (!char) return false;
 
-        const items = worldRepo.getNearbyItems(char.position, radius);
+        const items = this.deps.worldRepo.getNearbyItems(char.position, radius);
 
         if (items.length === 0) {
             Logger.info('GameCommandManager', 'No items nearby to pickup');
@@ -490,11 +479,7 @@ class GameCommandManagerClass {
             return false;
         }
 
-        const container = architectureBridge.getContainer();
-        const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
-        const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
-
-        const npc = worldRepo.getNpc(objectId);
+        const npc = this.deps.worldRepo.getNpc(objectId);
         // TODO: Add player lookup when player repository is implemented
         const target = npc;
 
@@ -504,7 +489,7 @@ class GameCommandManagerClass {
         }
 
         // Устанавливаем таргет
-        charRepo.update((char) => {
+        this.deps.characterRepo.update((char) => {
             char.setTarget(objectId);
             return char;
         });
@@ -514,4 +499,21 @@ class GameCommandManagerClass {
     }
 }
 
-export const GameCommandManager = new GameCommandManagerClass();
+// Глобальный инстанс — будет инициализирован в index.ts
+export let GameCommandManager: GameCommandManagerClass;
+
+/**
+ * Инициализировать GameCommandManager с зависимостями
+ * Должен вызываться один раз при старте приложения (в index.ts)
+ */
+export function initGameCommandManager(deps: GameCommandManagerDeps): GameCommandManagerClass {
+    GameCommandManager = new GameCommandManagerClass(deps);
+    return GameCommandManager;
+}
+
+/**
+ * Сбросить инстанс (для тестов)
+ */
+export function resetGameCommandManager(): void {
+    GameCommandManager = undefined as unknown as GameCommandManagerClass;
+}

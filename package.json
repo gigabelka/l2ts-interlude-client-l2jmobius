@@ -14,7 +14,7 @@
     "url": "https://github.com/gigabelka/l2ts-interlude-client-l2jmobius"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.14.0"
   },
   "scripts": {
     "dev": "cross-env LOG_LEVEL=SILENT ts-node src/index.ts",
@@ -31,10 +31,11 @@
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
     "commit": "node scripts/bump-version.js && git add -A && git commit",
-    "export:data": "node scripts/export-xml.js && node scripts/normalize-database.js"
+    "export:data": "node -e \"const fs=require('fs');if(!fs.existsSync('stats')){console.error('\\n❌ Ошибка: папка stats/ не найдена.');console.log('\\n📋 Перед запуском скопируйте папку data/stats из сервера L2J_Mobius:');console.log('   https://gitlab.com/MobiusDevelopment/L2J_Mobius/-/tree/master/L2J_Mobius_CT_0_Interlude');console.log('\\n   В корень проекта рядом с package.json.\\n');process.exit(1);}\" && node scripts/export-xml.js && node scripts/normalize-database.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.3.1",
     "helmet": "^8.1.0",
@@ -44,11 +45,16 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/cors": "^2.8.19",
+    "@types/dotenv": "^6.1.1",
     "@types/express": "^5.0.6",
     "@types/node": "^22.15.42",
     "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
     "cross-env": "^10.1.0",
+    "globals": "^17.4.0",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",

@@ -26,7 +26,7 @@ import { RequestInventoryOpen } from './packets/outgoing/RequestInventoryOpen';
 import { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
 
 // Services
-import { GameCommandManager } from './GameCommandManager';
+import type { GameCommandManagerClass } from './GameCommandManager';
 import type { IGameClient } from './IGameClient';
 
 /**
@@ -39,6 +39,7 @@ export interface GameClientDependencies {
     worldRepo: IWorldRepository;
     inventoryRepo: IInventoryRepository;
     connectionRepo: IConnectionRepository;
+    commandManager: GameCommandManagerClass;
 }
 
 /**
@@ -48,6 +49,7 @@ export class GameClientNew extends Connection implements IGameClient {
     private state: GameState = GameState.IDLE;
     private crypt: GameCrypt = new GameCrypt();
     private deps: GameClientDependencies;
+    private inventoryRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(
         private session: SessionData,
@@ -63,7 +65,7 @@ export class GameClientNew extends Connection implements IGameClient {
         this.state = GameState.CONNECTING;
 
         // Initialize services
-        GameCommandManager.setGameClient(this);
+        this.deps.commandManager.setGameClient(this);
 
         // Update connection state via repository
         this.publishConnectionState(ConnectionPhase.ENTERING_GAME);
@@ -83,7 +85,13 @@ export class GameClientNew extends Connection implements IGameClient {
     protected onClose(): void {
         Logger.info('GameClient', '*** GAME SERVER CONNECTION CLOSED ***');
 
-        GameCommandManager.setGameClient(null);
+        this.deps.commandManager.setGameClient(null);
+
+        // Clear inventory retry timer to prevent memory leak
+        if (this.inventoryRetryTimer) {
+            clearTimeout(this.inventoryRetryTimer);
+            this.inventoryRetryTimer = null;
+        }
 
         // Clear repositories
         this.deps.characterRepo.reset();
@@ -146,12 +154,13 @@ export class GameClientNew extends Connection implements IGameClient {
                         this.sendPacket(new RequestInventoryOpen());
 
                         // Retry inventory request after 3 seconds
-                        setTimeout(() => {
+                        this.inventoryRetryTimer = setTimeout(() => {
                             const state = this.deps.inventoryRepo.getState();
                             if (state.items.length === 0) {
                                 Logger.info('GameClient', 'Inventory empty, retrying request...');
                                 this.sendPacket(new RequestInventoryOpen());
                             }
+                            this.inventoryRetryTimer = null;
                         }, 3000);
                     }
                 }
@@ -228,9 +237,12 @@ export class GameClientNew extends Connection implements IGameClient {
                 if (opcode === 0xD3 && this.state === GameState.IN_GAME) {
                     // NetPingRequest - respond with pong
                     // Packet structure: opcode (1) + pingId (4 bytes, int32LE)
-                    const pingId = body.readInt32LE(1) || 0;
+                    const pingId = body.readInt32LE(1);
+                    const pong = Buffer.allocUnsafe(5);
+                    pong[0] = 0xA8;
+                    pong.writeInt32LE(pingId, 1);
+                    this.sendPacketRawBuffer(pong);
                     Logger.debug('GameClient', `pingId=${pingId} -> Pong`);
-                    this.sendPacketRawBuffer(Buffer.from([0xA8, pingId]));
                     return;
                 }
                 Logger.warn('GameClient', `Packet in state ${this.state}, opcode=0x${opcode.toString(16)}`);

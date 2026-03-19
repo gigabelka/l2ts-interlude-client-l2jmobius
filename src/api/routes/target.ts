@@ -2,14 +2,14 @@ import { Router, type Request, type Response } from 'express';
 import { GameCommandManager } from '../../game/GameCommandManager';
 import { Logger } from '../../logger/Logger';
 import { NpcDatabase } from '../../data/NpcDatabase';
-import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { ICharacterRepository, IWorldRepository } from '../../domain/repositories';
 
 const router = Router();
 
 // Repository accessors
-const container = architectureBridge.getContainer();
+const container = getContainer();
 const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
 const getWorldRepo = () => container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
 

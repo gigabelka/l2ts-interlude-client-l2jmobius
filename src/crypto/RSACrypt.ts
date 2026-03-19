@@ -93,7 +93,7 @@ class RSACrypt {
       Logger.logCryptoSingle('RSA CIPHERTEXT', Buffer.from(ciphertext), 32);
       return Buffer.from(ciphertext);
     } catch (error) {
-      throw new Error(`RSA encryption failed: ${error}`);
+      throw new Error(`RSA encryption failed: ${error}`, { cause: error });
     }
   }
 

@@ -253,9 +253,9 @@ export enum GameOpCode {
   TRADE_OWN_ADD = 0x20,
   TRADE_OTHER_ADD = 0x22,
   TRADE_DONE = 0x23,
-  ABnormal_STATUS_UPDATE = 0x19,
+  ABnormal_STATUS_UPDATE = 0x19, // eslint-disable-line @typescript-eslint/no-duplicate-enum-values
   SHORT_BUFF_STATUS_UPDATE = 0xF4,
-  STOP_MOVE_WITH_LOCATION = 0x47,
+  STOP_MOVE_WITH_LOCATION = 0x47, // eslint-disable-line @typescript-eslint/no-duplicate-enum-values
   NET_PING_REQUEST = 0xD3,
   SSQ_INFO = 0x73,
   PET_INFO = 0xB1,

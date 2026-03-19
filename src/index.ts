@@ -6,8 +6,8 @@
 import { CONFIG } from './config';
 import { Logger } from './logger/Logger';
 
-// New Architecture
-import { architectureBridge } from './infrastructure/integration/NewArchitectureBridge';
+// DI Container
+import { getContainer } from './config/di/appContainer';
 import { DI_TOKENS } from './config/di/Container';
 import type { IEventBus, IPacketProcessor } from './application/ports';
 import type { ICharacterRepository, IWorldRepository, IInventoryRepository, IConnectionRepository } from './domain/repositories';
@@ -15,6 +15,7 @@ import type { ICharacterRepository, IWorldRepository, IInventoryRepository, ICon
 // Game
 import { GameClientNew } from './game/GameClient';
 import { LoginClientNew } from './login/LoginClient';
+import { initGameCommandManager } from './game/GameCommandManager';
 
 
 // API
@@ -38,14 +39,7 @@ function initLogging(): void {
     Logger.level = logLevel as 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 }
 
-/**
- * Инициализация новой архитектуры
- */
-function initArchitecture(): void {
-    const mode = (process.env['ARCHITECTURE_MODE'] as 'ADAPTER' | 'NEW') || 'NEW';
-    architectureBridge.initialize(mode);
-    Logger.info('Bootstrap', `Architecture initialized in ${mode} mode`);
-}
+// Architecture initialization removed - DI container is now lazy-initialized
 
 /**
  * Инициализация API сервера
@@ -98,13 +92,20 @@ function onLoginComplete(session: SessionData): void {
     Logger.info('Bootstrap', '='.repeat(60));
 
     // Получаем зависимости из контейнера
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
     const packetProcessor = container.resolve<IPacketProcessor>(DI_TOKENS.PacketProcessor).getOrThrow();
     const charRepo = container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow();
     const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
     const invRepo = container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
     const connectionRepo = container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
+
+    // Инициализируем GameCommandManager с зависимостями (DI вместо Service Locator)
+    const commandManager = initGameCommandManager({
+        characterRepo: charRepo,
+        worldRepo,
+        eventBus,
+    });
 
     // Запускаем Game Client
     const gameClient = new GameClientNew(session, {
@@ -114,6 +115,7 @@ function onLoginComplete(session: SessionData): void {
         worldRepo,
         inventoryRepo: invRepo,
         connectionRepo,
+        commandManager,
     });
     gameClient.start();
 }
@@ -128,7 +130,7 @@ function shutdown(services: { api: ApiServer; ws: WsServerNew }): void {
     services.ws.stop();
 
     // Очищаем репозитории
-    const container = architectureBridge.getContainer();
+    const container = getContainer();
     container.resolve<ICharacterRepository>(DI_TOKENS.CharacterRepository).getOrThrow().reset();
     container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow().reset();
     container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow().reset();
@@ -157,8 +159,7 @@ async function main(): Promise<void> {
     Logger.info('Bootstrap', `Server     : ${CONFIG.ServerId}`);
     Logger.info('Bootstrap', '='.repeat(60));
 
-    // 2. Инициализация архитектуры
-    initArchitecture();
+    // 2. DI container is lazy-initialized on first use
 
     // 3. Инициализация API сервера
     const services = await initApiServer();
@@ -180,7 +181,7 @@ async function main(): Promise<void> {
         Logger.info('Bootstrap', 'Starting Login Client...');
 
         setTimeout(() => {
-            const container = architectureBridge.getContainer();
+            const container = getContainer();
             const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
             const connectionRepo = container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
 
@@ -199,4 +200,4 @@ main().catch((error) => {
 });
 
 // Экспорты для programmatic access
-export { architectureBridge };
+export { getContainer };

@@ -65,35 +65,48 @@ npm run build
 
 ## ⚙️ Configuration
 
-Edit `src/config.ts` with your server address, credentials, and character slot:
+Copy `.env.example` to `.env` and configure your settings:
 
-```typescript
-export const CONFIG = {
-  Username: "your_login",          // Your game account login
-  Password: "your_password",       // Your game account password
-  LoginIp: "192.168.0.33",         // Login server IP address
-  LoginPort: 2106,                 // Login server port (default: 2106)
-  GamePort: 7777,                  // Game server port (default: 7777)
-  Protocol: 746,                   // Interlude protocol version
-  ServerId: 2,                     // Server ID from server list
-  CharSlotIndex: 0,                // Character slot (0-based index)
-} as const;
-
-export const API_CONFIG = {
-  port: 3000,                      // API server port
-  host: '0.0.0.0',                 // API server host
-  apiKey: process.env.API_KEY || '', // API auth key (empty = no auth)
-  enableCors: true,                // Enable CORS for development
-} as const;
+```bash
+cp .env.example .env
 ```
+
+Edit `.env` with your server address, credentials, and character slot:
+
+```bash
+# L2 Server Connection
+L2_LOGIN_IP=192.168.0.33         # Login server IP address
+L2_LOGIN_PORT=2106               # Login server port (default: 2106)
+L2_GAME_PORT=7777                # Game server port (default: 7777)
+L2_USERNAME=your_login           # Your game account login
+L2_PASSWORD=your_password        # Your game account password
+L2_SERVER_ID=2                   # Server ID from server list
+L2_CHAR_SLOT=0                   # Character slot (0-based index)
+L2_PROTOCOL=746                  # Interlude protocol version
+
+# API
+API_KEY=                         # API authentication key (empty = no auth)
+API_PORT=3000                    # API server port
+```
+
+> **Note:** `.env` file is gitignored. Never commit your credentials!
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `L2_LOGIN_IP` | Login server IP address | `127.0.0.1` |
+| `L2_LOGIN_PORT` | Login server port | `2106` |
+| `L2_GAME_PORT` | Game server port | `7777` |
+| `L2_USERNAME` | Game account login | *(required)* |
+| `L2_PASSWORD` | Game account password | *(required)* |
+| `L2_SERVER_ID` | Server ID from server list | `1` |
+| `L2_CHAR_SLOT` | Character slot index | `0` |
+| `L2_PROTOCOL` | Protocol version | `746` |
+| `API_PORT` | API server port | `3000` |
+| `API_KEY` | API authentication key | `""` |
 | `LOG_LEVEL` | Logging level: `DEBUG`, `INFO`, `WARN`, `ERROR`, `SILENT` | `ERROR` |
 | `AUTO_CONNECT_GAME` | Auto-connect to game server on startup | `true` |
-| `API_KEY` | API authentication key | `""` |
 | `NODE_ENV` | Environment mode | `development` |
 
 ---
@@ -119,6 +132,53 @@ npm test
 # Run tests in watch mode
 npm run test:watch
 ```
+
+---
+
+## 📦 Data Export
+
+Скрипты для экспорта игровых данных (предметы, NPC, скиллы, сеты брони и др.) из сервера L2J Mobius.
+
+### Требования
+
+Перед использованием скриптов необходимо получить исходные XML-данные с сервера:
+
+1. **Скачайте сервер L2J_Mobius CT_0 Interlude:**
+   ```
+   https://gitlab.com/MobiusDevelopment/L2J_Mobius/-/tree/master/L2J_Mobius_CT_0_Interlude
+   ```
+
+2. **Скопируйте папку `data/stats`** из сервера в корень проекта (рядом с `package.json`).
+   В результате должна появиться папка `stats/` с подпапками: `items/`, `npcs/`, `skills/` и др.
+
+### Использование
+
+```bash
+# Полный экспорт (конвертация XML → JSON → нормализация)
+npm run export:data
+
+# Или пошагово:
+node scripts/export-xml.js        # Конвертация XML в database.json
+node scripts/normalize-database.js # Нормализация в удобную структуру
+node scripts/export-stats.js       # Альтернативный полный экспорт
+```
+
+### Результат
+
+Нормализованные данные сохраняются в `src/data/export/`:
+
+| Файл | Описание |
+|------|----------|
+| `armorsets/armorsets.json` | Сеты брони со статами и бонусами |
+| `items/items.json` | Все предметы (оружие, броня, расходники) |
+| `npcs/npcs.json` | NPC с параметрами и дропом |
+| `skills/skills.json` | Скиллы с эффектами |
+| `players/skillTrees.json` | Деревья умений по классам |
+| `players/classTemplates.json` | Стартовые статы и предметы классов |
+| `pets/pets.json` | Данные питомцев |
+| `fishing/fishing.json` | Рыбалка (удочки, рыбы, монстры) |
+| `henna.json` | Хенна (татуировки) |
+| `augmentation/augmentation.json` | Аугментация оружия |
 
 ---
 
@@ -477,10 +537,8 @@ npm run lint:fix      # Fix auto-fixable errors
 
 ## 📖 Documentation
 
-- **[DOCUMENTATION.md](DOCUMENTATION.md)** — Technical developer documentation
-- **[AGENTS.md](AGENTS.md)** — Guide for AI agents working on this codebase
-- **[client_server_protocol.md](client_server_protocol.md)** — Protocol specification (source of truth)
-- **[DEBUG_HISTORY.md](DEBUG_HISTORY.md)** — Problem/solution history
+- **[docs/DOCUMENTATION.md](docs/DOCUMENTATION.md)** — Technical developer documentation
+- **[docs/client_server_protocol.md](docs/client_server_protocol.md)** — Protocol specification (source of truth)
 
 ---
 

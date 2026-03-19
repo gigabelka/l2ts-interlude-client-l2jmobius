@@ -9,7 +9,7 @@ import { parse } from 'url';
 import type { IncomingMessage, Server } from 'http';
 import { API_CONFIG } from '../../config';
 import { Logger } from '../../logger/Logger';
-import { architectureBridge } from '../../infrastructure/integration/NewArchitectureBridge';
+import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { IEventBus } from '../../application/ports';
 import type { IConnectionRepository } from '../../domain/repositories';
@@ -98,7 +98,7 @@ export class WsServerNew {
      * Subscribe to new architecture EventBus
      */
     private subscribeToEventBus(): void {
-        const container = architectureBridge.getContainer();
+        const container = getContainer();
         const eventBus = container.resolve<IEventBus>(DI_TOKENS.EventBus).getOrThrow();
 
         const subscription = eventBus.subscribeAll((event: { type: string; channel?: string; payload: unknown; timestamp: Date }) => {
@@ -167,7 +167,7 @@ export class WsServerNew {
         });
 
         // Send current connection phase
-        const connectionRepo = architectureBridge.getContainer().resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
+        const connectionRepo = getContainer().resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
         const connectionState = connectionRepo.get();
         
         this.sendToClient(client, {
