@@ -8,6 +8,7 @@ import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { ICharacterRepository, IWorldRepository } from '../../domain/repositories';
 import { NpcDatabase } from '../../data/NpcDatabase';
+import { GameCommandManager } from '../../game/GameCommandManager';
 
 const router = Router();
 
@@ -237,6 +238,49 @@ router.get('/items', (req: Request, res: Response) => {
             requestId: req.requestId
         }
     });
+});
+
+/**
+ * POST /api/v1/nearby/pickup
+ * Pickup an item by objectId.
+ * Body: { objectId: number }
+ */
+router.post('/pickup', async (req: Request, res: Response) => {
+    const { objectId } = req.body;
+
+    if (typeof objectId !== 'number') {
+        res.status(400).json({
+            success: false,
+            error: { code: 'INVALID_PARAMETER', message: 'objectId must be a number' },
+            meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+        });
+        return;
+    }
+
+    if (!GameCommandManager.isReady()) {
+        res.status(503).json({
+            success: false,
+            error: { code: 'NOT_READY', message: 'Not connected to game server' },
+            meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+        });
+        return;
+    }
+
+    const success = await GameCommandManager.pickupItem(objectId);
+
+    if (success) {
+        res.json({
+            success: true,
+            data: { message: 'Pickup command sent', objectId },
+            meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+        });
+    } else {
+        res.status(500).json({
+            success: false,
+            error: { code: 'PICKUP_FAILED', message: 'Failed to pickup item' },
+            meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
+        });
+    }
 });
 
 export default router;
