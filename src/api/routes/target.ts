@@ -222,8 +222,11 @@ router.post('/next-attack', (req: Request, res: Response) => {
     // Send Action packet to server to select target
     const actionSuccess = GameCommandManager.action(nextTarget.id, false);
     
-    // Update local state with database name
-    character.setTarget(nextTarget.id, npcName, 'NPC');
+    // Update local state with database name - use update() to persist changes
+    getCharRepo().update((char) => {
+        char.setTarget(nextTarget.id, npcName, 'NPC');
+        return char;
+    });
 
     // Immediately attack the target
     const attackSuccess = GameCommandManager.attack(nextTarget.id, false);

@@ -16,7 +16,7 @@ const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.Char
  * Attack current or specified target.
  * Body: { objectId?: number }
  */
-router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) => {
+router.post('/attack', combatRateLimitMiddleware, async (req: Request, res: Response) => {
     const { objectId } = req.body;
     const char = getCharRepo().get();
     const targetId = objectId || char?.targetId;
@@ -54,6 +54,13 @@ router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) 
         return;
     }
 
+    // Send Action packet first to select target on server, then attack
+    // This is required by L2J Mobius server - target must be selected before attack
+    GameCommandManager.action(targetId, false);
+    
+    // Small delay to ensure target is selected before attack
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     // Send attack command via GameCommandManager
     const success = GameCommandManager.attack(targetId, false);
     
