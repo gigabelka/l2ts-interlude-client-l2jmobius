@@ -66,6 +66,25 @@ Key tokens:
 - `DI_TOKENS.PacketProcessor` - Game packet processor
 - `DI_TOKENS.PacketSerializer` - Outgoing packet serializer
 
+### GameState Architecture
+
+**GameState** (`src/game/GameState.ts`) is a centralized in-memory store for all game state:
+- `me` - Current character data
+- `players` - Map of nearby players
+- `npcs` - Map of visible NPCs
+- `items` - Map of items on ground
+- `inventory` - Character inventory
+- `skills` - Character skills
+- `party` - Party members
+- `chat` - Chat history (last 50 messages)
+- `effects` - Active buffs/debuffs
+- `target` - Current target info
+
+**GameStateUpdater** (`src/game/GameStateUpdater.ts`) bridges incoming packets and GameState:
+- Processes decoded packets and updates GameState
+- Emits `ws:event` for WebSocket Vision API
+- Handles: UserInfo, CharInfo, NpcInfo, MoveToLocation, DeleteObject, StatusUpdate, Die, Revive, CreatureSay, AbnormalStatusUpdate, MagicSkillUse, MyTargetSelected, TargetUnselected
+
 ### Two-Phase Connection Model
 
 The client uses FSM-driven clients for both connection phases:
@@ -95,7 +114,8 @@ Domain events include:
 ### External APIs
 
 - **REST API** (port 3000): HTTP endpoints for character control, combat, movement, inventory
-- **WebSocket API**: Real-time game event streaming with channel-based subscriptions
+- **WebSocket API** (port 3000/ws): Real-time game event streaming with channel-based subscriptions
+- **WebSocket Vision API** (port 3001): Standalone high-performance WebSocket server for GameState streaming
 - **Dashboard**: Web UI for monitoring client state and manual control
 
 **CRITICAL:** The client strictly mimics the packet layout and padding observed in Wireshark captures to successfully connect.
@@ -244,6 +264,22 @@ Available subscription channels:
 - `movement` - Position changes
 - `party` - Party events
 - `inventory` - Inventory changes
+
+## WebSocket Vision API (Port 3001)
+
+Standalone WebSocket server (`src/ws/WsServer.ts`) that streams GameState updates with optimizations:
+
+**Features:**
+- Throttling for `entity.move` events (100ms per object)
+- Batching of events (50ms interval)
+- Metrics: eventsPerSecond, droppedMoveEvents, totalEventsSent
+- HTTP endpoints for snapshots: `/api/v1/snapshot`, `/api/v1/me`, `/api/v1/npcs`, etc.
+
+**Subscription channels:** `*`, `me`, `players`, `npcs`, `items`, `inventory`, `combat`, `chat`, `party`, `effects`, `target`, `movement`, `skills`
+
+**Client examples:**
+- `examples/ws-client-node.js` - Node.js client with colored output
+- `examples/ws-client-python.py` - Python asyncio client
 
 ## Testing
 

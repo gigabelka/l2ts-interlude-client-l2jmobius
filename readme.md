@@ -202,7 +202,9 @@ npm run dev              # Разработка
 npm run debug            # Подробное логирование пакетов
 npm run build            # Сборка
 npm start                # Запуск
-npm test                 # Тесты
+npm test                 # Тесты (168 тестов)
+npm run test:watch       # Тесты в режиме наблюдения
+npm run test:coverage    # Тесты с покрытием
 npm run lint             # Линтинг
 npm run export:data      # Экспорт данных из L2J
 ```

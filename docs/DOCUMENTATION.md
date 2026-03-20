@@ -5,7 +5,14 @@
 > **API Version:** `v1.0.0`  
 > **Стек:** TypeScript 5.9.3 / Node.js 24.14.0+ · L2J_Mobius CT_0_Interlude  
 > **Архитектура:** Clean Architecture + Dependency Injection  
-> **Дата обновления:** 2026-03-20
+> **Дата обновления:** 2026-03-20 (Final Verification ✅)
+> 
+> **Финальная проверка:**
+> - ✅ TypeScript компиляция — ошибок нет
+> - ✅ Циклические зависимости — не обнаружены
+> - ✅ Тесты — 168 тестов проходят
+> - ✅ Сборка — успешна
+> - ✅ Graceful shutdown — реализован
 
 ---
 
@@ -817,7 +824,92 @@ ws://localhost:3000/ws?token=your_api_key_here
 
 ---
 
-## WebSocket API
+## WebSocket Vision API (Port 3001)
+
+Standalone WebSocket сервер для трансляции GameState в реальном времени с оптимизациями производительности.
+
+### Конфигурация
+
+```typescript
+export const WS_CONFIG = {
+    enabled: true,           // WS_ENABLED env
+    port: 3001,              // WS_PORT env
+    authEnabled: false,      // WS_AUTH_ENABLED env
+    authTokens: [],          // WS_AUTH_TOKENS env (comma-separated)
+    maxClients: 10,          // WS_MAX_CLIENTS env
+    batchInterval: 50,       // WS_BATCH_INTERVAL env (ms, 0 = disabled)
+    moveThrottleMs: 100,     // WS_MOVE_THROTTLE_MS env
+};
+```
+
+### HTTP Endpoints (порт 3001)
+
+| Эндпоинт | Метод | Описание |
+|----------|-------|----------|
+| `/api/v1/snapshot` | GET | Полный снимок GameState |
+| `/api/v1/me` | GET | Данные персонажа |
+| `/api/v1/players` | GET | Список видимых игроков |
+| `/api/v1/npcs` | GET | Список видимых NPC |
+| `/api/v1/inventory` | GET | Инвентарь |
+| `/api/v1/chat` | GET | Последние 50 сообщений чата |
+| `/api/v1/stats` | GET | Статистика WS-сервера |
+| `/api/v1/health` | GET | Health check |
+
+### WebSocket Команды
+
+| Команда | Ответ | Описание |
+|---------|-------|----------|
+| `subscribe` | `subscribed` | Подписка на каналы |
+| `unsubscribe` | `unsubscribed` | Отписка от каналов |
+| `get.snapshot` | `snapshot` | Полный снапшот состояния |
+| `get.me` | `me` | Данные персонажа |
+| `get.players` | `players` | Список игроков |
+| `get.npcs` | `npcs` | Список NPC |
+| `get.inventory` | `inventory` | Инвентарь |
+| `get.party` | `party` | Члены группы |
+| `get.effects` | `effects` | Баффы/дебаффы |
+| `get.skills` | `skills` | Скиллы |
+| `ping` | `pong` | Проверка связи |
+
+### Каналы подписки
+
+| Канал | События |
+|-------|---------|
+| `*` | Все события |
+| `me` | `me.update`, `me.sit`, `me.stand` |
+| `players` | `player.appear`, `player.update` |
+| `npcs` | `npc.appear`, `npc.update` |
+| `items` | `item.spawn`, `item.drop` |
+| `movement` | `entity.move`, `entity.despawn` |
+| `combat` | `combat.skill.use`, `entity.die`, `entity.revive` |
+| `chat` | `chat.message` |
+| `target` | `target.select`, `target.unselect`, `status.update` |
+| `effects` | `effects.update` |
+| `inventory` | `inventory.full`, `inventory.update` |
+| `skills` | `skills.full` |
+| `party` | `party.*` |
+
+### Оптимизации
+
+1. **Throttling для `entity.move`** — события движения для каждого `objectId` отправляются не чаще 1 раза в `moveThrottleMs` (по умолчанию 100ms)
+2. **Batching событий** — если `batchInterval > 0`, события накапливаются и отправляются пачкой
+3. **Метрики** — eventsPerSecond, droppedMoveEvents, totalEventsSent
+
+### Примеры клиентов
+
+**Node.js** (`examples/ws-client-node.js`):
+```bash
+node examples/ws-client-node.js --host=localhost --port=3001 --channels='me,chat,combat'
+```
+
+**Python** (`examples/ws-client-python.py`):
+```bash
+python examples/ws-client-python.py --host=localhost --port=3001 --channels=me,chat,combat
+```
+
+---
+
+## WebSocket API (Port 3000)
 
 ### Подключение
 
@@ -1393,9 +1485,65 @@ Offset  Field           Type        Description
 
 ## State Management
 
-### GameStateStore
+### GameState (WebSocket Vision API)
 
-Central in-memory store for all game state:
+**GameState** (`src/game/GameState.ts`) — единое централизованное in-memory хранилище всего игрового состояния:
+
+| Свойство | Тип | Описание |
+|----------|-----|----------|
+| `me` | `CharacterMe \| null` | Данные текущего персонажа |
+| `players` | `Map<number, Player>` | Другие игроки (objectId → Player) |
+| `npcs` | `Map<number, Npc>` | NPC/мобы в зоне видимости |
+| `items` | `Map<number, DroppedItem>` | Предметы на земле |
+| `inventory` | `Map<number, InventoryItem>` | Инвентарь персонажа |
+| `skills` | `Skill[]` | Скиллы персонажа |
+| `party` | `PartyMember[]` | Члены группы |
+| `chat` | `ChatMessage[]` | История чата (50 последних) |
+| `effects` | `ActiveEffect[]` | Активные баффы/дебаффы |
+| `target` | `TargetInfo \| null` | Текущая цель |
+| `serverTime` | `number` | Серверное время |
+
+**Методы:**
+- `update(eventName, data)` — обновляет состояние и эмитит `ws:event`
+- `getSnapshot()` — возвращает полный снимок мира (Maps → Arrays)
+- `reset()` — очищает все коллекции (при отключении)
+- `calcDistance(x, y)` — 2D расстояние от персонажа до точки
+
+### GameStateUpdater
+
+**GameStateUpdater** (`src/game/GameStateUpdater.ts`) — мост между серверными пакетами и GameState:
+
+| Метод | Описание |
+|-------|----------|
+| `handlePacket(opcode, data)` | Главный метод обработки пакета |
+| `handleUserInfo(data)` | 0x04 - обновление state.me |
+| `handleCharInfo(data)` | 0x03 - добавление/обновление state.players |
+| `handleNpcInfo(data)` | 0x16 - добавление/обновление state.npcs |
+| `handleMoveToLocation(data)` | 0x2E - движение сущности |
+| `handleDeleteObject(data)` | 0x08 - удаление объекта |
+| `handleStatusUpdate(data)` | 0x0E - обновление HP/MP/CP |
+| `handleDie(data)` | 0x06 - смерть сущности |
+| `handleRevive(data)` | 0x07 - воскрешение сущности |
+| `handleCreatureSay(data)` | 0x4A - сообщение чата |
+| `handleAbnormalStatusUpdate(data)` | 0x39 - баффы/дебаффы |
+| `handleMagicSkillUse(data)` | 0x76 - использование скилла |
+| `handleMyTargetSelected(data)` | 0xA1 - выбор цели |
+| `handleTargetUnselected(data)` | 0xA6 - снятие цели |
+
+**WS-события, генерируемые GameStateUpdater:**
+- `me.update` — обновление данных персонажа
+- `player.appear` / `player.update` — появление/обновление игрока
+- `npc.appear` / `npc.update` — появление/обновление NPC
+- `entity.move` — движение сущности
+- `entity.despawn` / `entity.die` / `entity.revive` — исчезновение/смерть/воскрешение
+- `chat.message` — сообщение чата
+- `effects.update` — обновление баффов
+- `target.select` / `target.unselect` — выбор/снятие цели
+- `disconnected` — отключение от сервера
+
+### GameStateStore (Legacy)
+
+Legacy in-memory store for all game state (постепенно заменяется GameState):
 
 - **CharacterState:** HP/MP/CP, position, stats, level, class, buffs
 - **WorldState:** NPCs, players, items on ground
@@ -1422,6 +1570,21 @@ EventBus.onAny((event) => {
 ```
 
 ---
+
+## Dictionaries
+
+Словари для маппинга ID в человекочитаемые названия (`src/game/dictionaries/`):
+
+| Файл | Содержимое | Количество |
+|------|------------|------------|
+| `classNames.ts` | Маппинг classId → название класса | 118+ классов |
+| `npcNames.ts` | Маппинг npcId → название NPC | 200+ NPC |
+| `itemNames.ts` | Маппинг itemId → название предмета | 150+ предметов |
+
+**Хелпер-функции:**
+- `getClassName(id: number): string` — имя класса или `"Unknown Class #id"`
+- `getNpcName(id: number): string` — имя NPC или `"Unknown NPC #id"`
+- `getItemName(id: number): string` — имя предмета или `"Unknown Item #id"`
 
 ## Data Structures (Schemas)
 
@@ -1684,18 +1847,27 @@ ws.on('message', (raw) => {
 | Opcode | Packet Name | Direction | Description | Status |
 |--------|-------------|-----------|-------------|--------|
 | `0x04` | `UserInfo` | Server → Client | Полная информация о персонаже | ✅ Implemented |
+| `0x03` | `CharInfo` | Server → Client | Информация о других игроках | ✅ Implemented |
 | `0x13` | `CharSelectInfo` | Server → Client | Список персонажей на аккаунте | ✅ Implemented |
 | `0x15` | `CharSelected` | Server → Client | Подтверждение выбора персонажа | ✅ Implemented |
 | `0x00` | `CryptInit` | Server → Client | Инициализация шифрования | ✅ Implemented |
+| `0x0E` | `StatusUpdate` | Server → Client | Обновление HP/MP/CP | ✅ Implemented |
+| `0x06` | `Die` | Server → Client | Смерть сущности | ✅ Implemented |
+| `0x07` | `Revive` | Server → Client | Воскрешение сущности | ✅ Implemented |
+| `0x39` | `AbnormalStatusUpdate` | Server → Client | Баффы и дебаффы | ✅ Implemented |
+| `0xA1` | `MyTargetSelected` | Server → Client | Выбор цели | ✅ Implemented |
+| `0xA6` | `TargetUnselected` | Server → Client | Снятие цели | ✅ Implemented |
 
 #### NPC & World
 
 | Opcode | Packet Name | Direction | Description | Status |
 |--------|-------------|-----------|-------------|--------|
 | `0x16` | `NpcInfo` | Server → Client | Информация о NPC (спавн, позиция, статы) | ✅ Implemented |
-| `0x0C` | `NpcDelete` | Server → Client | Удаление NPC (деспавн) | ✅ Implemented |
-| `0x1B` | `DropItem` | Server → Client | Предмет упал на землю | ✅ Implemented |
+| `0x08` | `DeleteObject` | Server → Client | Удаление объекта (деспавн) | ✅ Implemented |
+| `0x0B` | `SpawnItem` | Server → Client | Появление предмета в мире | ✅ Implemented |
+| `0x0C` | `DropItem` | Server → Client | Предмет упал на землю | ✅ Implemented |
 | `0x21` | `GetItem` | Server → Client | Предмет подобран | ✅ Implemented |
+| `0x2E` | `MoveToLocation` | Server → Client | Движение сущности | ✅ Implemented |
 
 #### Combat
 
@@ -1703,13 +1875,22 @@ ws.on('message', (raw) => {
 |--------|-------------|-----------|-------------|--------|
 | `0x05` | `Attack` | Server → Client | Атака (своя или чужая) | ✅ Implemented |
 | `0x48` | `StatusUpdate` | Server → Client | Обновление HP/MP/CP цели | ✅ Implemented |
+| `0x76` | `MagicSkillUse` | Server → Client | Использование скилла | ✅ Implemented |
 | `0x62` | `SystemMessage` | Server → Client | Системные сообщения | ✅ Implemented |
+
+#### Inventory & Skills
+
+| Opcode | Packet Name | Direction | Description | Status |
+|--------|-------------|-----------|-------------|--------|
+| `0x1B` | `ItemList` | Server → Client | Полный список инвентаря | ✅ Implemented |
+| `0x19` | `InventoryUpdate` | Server → Client | Частичное обновление инвентаря | ✅ Implemented |
+| `0x58` | `SkillList` | Server → Client | Список скиллов персонажа | ✅ Implemented |
 
 #### Chat
 
 | Opcode | Packet Name | Direction | Description | Status |
 |--------|-------------|-----------|-------------|--------|
-| `0x4A` | `Say2` | Server → Client | Сообщение в чате (все каналы) | ✅ Implemented |
+| `0x4A` | `Say2` / `CreatureSay` | Server → Client | Сообщение в чате (все каналы) | ✅ Implemented |
 
 #### Movement
 
@@ -1986,13 +2167,28 @@ tests/
 │   └── game/
 │       ├── connection.test.ts   # Connection flow
 │       └── movement.test.ts     # Movement tests
+├── new-architecture/            # Новая архитектура
+│   ├── domain/                  # Тесты доменных сущностей
+│   ├── infrastructure/          # Тесты инфраструктуры
+│   └── application/             # Тесты приложения
+├── performance/                 # Производственные тесты
+│   ├── BufferPool.test.ts
+│   ├── CacheManager.test.ts
+│   └── PacketSerializer.test.ts
 ├── fixtures/
 │   ├── packets/                 # Binary packet samples
 │   └── mocks/                   # Mock server responses
 └── utils/
     ├── mockServer.ts            # Mock L2 server
     └── testHelpers.ts           # Test utilities
+
+src/__tests__/                   # Unit тесты
+├── GameState.test.ts            # Тесты GameState
+├── GameStateUpdater.test.ts     # Тесты обработки пакетов
+└── WsServer.test.ts             # Тесты WebSocket сервера
 ```
+
+**Статус:** ✅ **168 тестов проходят успешно**
 
 ### Test Configuration
 

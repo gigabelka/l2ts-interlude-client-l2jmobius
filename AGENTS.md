@@ -63,11 +63,31 @@ src/
 │       ├── GamePacketProcessor.ts
 │       └── GameIncomingPacketFactory.ts
 │
-├── api/                        # API Layer
+├── api/                        # API Layer (REST + WebSocket на порту 3000)
 │   ├── ApiServer.ts            # Express REST server with Helmet, CORS
 │   ├── routes/                 # API endpoints (character, combat, movement, chat, etc.)
 │   ├── middleware/             # Auth, rate limiting, request ID
-│   └── ws/WsServer.ts          # WebSocket server
+│   └── ws/WsServer.ts          # WebSocket server (shared mode)
+│
+├── ws/                         # Standalone WebSocket Vision API (порт 3001)
+│   ├── WsServer.ts             # WsApiServer с throttling/batching
+│   ├── HttpEndpoints.ts        # HTTP endpoints для снимков GameState
+│   └── auth.ts                 # Timing-safe аутентификация
+│
+├── game/                       # Game Server Phase + GameState
+│   ├── GameClient.ts           # FSM-driven game client
+│   ├── GameCrypt.ts            # XOR encryption (disabled for CT0)
+│   ├── GameCommandManager.ts   # Command manager singleton
+│   ├── GameState.ts            # Единое in-memory хранилище состояния
+│   ├── GameStateUpdater.ts     # Мост между пакетами и GameState
+│   ├── entities/types.ts       # TypeScript интерфейсы для API
+│   ├── dictionaries/           # Словари имён
+│   │   ├── classNames.ts       # Маппинг classId → имя класса
+│   │   ├── npcNames.ts         # Маппинг npcId → имя NPC
+│   │   ├── itemNames.ts        # Маппинг itemId → имя предмета
+│   │   └── index.ts
+│   ├── packets/outgoing/       # Outgoing game packets
+│   └── IGameClient.ts
 │
 ├── network/                    # TCP & Packet Layer
 │   ├── Connection.ts           # TCP client with L2 framing
@@ -83,19 +103,11 @@ src/
 ├── login/                      # Login Server Phase
 │   ├── LoginClient.ts          # FSM-driven login client
 │   ├── LoginCrypt.ts           # Login crypto (Blowfish + XOR)
-│   ├── packets/incoming/       # Incoming packet DTOs (InitPacket, LoginOkPacket, etc.)
+│   ├── packets/incoming/       # Incoming packet DTOs
 │   ├── packets/outgoing/       # Outgoing packet builders
 │   ├── protocol/handlers/      # Login packet handlers
 │   ├── protocol/LoginPacketProcessor.ts
 │   └── session/SessionManager.ts
-│
-├── game/                       # Game Server Phase
-│   ├── GameClient.ts           # FSM-driven game client
-│   ├── GameCrypt.ts            # XOR encryption (disabled for CT0)
-│   ├── GameCommandManager.ts   # Command manager singleton
-│   ├── GameState.ts            # Game state definitions
-│   ├── packets/outgoing/       # Outgoing game packets (MoveToLocation, AttackRequest, etc.)
-│   └── IGameClient.ts
 │
 ├── data/                       # Game data
 │   ├── ItemDatabase.ts
@@ -190,6 +202,15 @@ API_KEY=             # Empty = no auth required
 API_PORT=3000
 LOG_LEVEL=ERROR      # DEBUG | INFO | WARN | ERROR | SILENT
 AUTO_CONNECT_GAME=true
+
+# WebSocket Vision API (Port 3001)
+WS_ENABLED=true          # Enable standalone WebSocket API
+WS_PORT=3001             # Port for WebSocket server
+WS_AUTH_ENABLED=false    # Enable token authentication
+WS_AUTH_TOKENS=          # Comma-separated valid tokens
+WS_MAX_CLIENTS=10        # Maximum concurrent clients
+WS_BATCH_INTERVAL=50     # Event batching interval in ms (0 = disabled)
+WS_MOVE_THROTTLE_MS=100  # Move event throttling in ms per object
 ```
 
 Configuration is validated using **Zod** schemas at startup. Invalid configuration will cause the process to exit with detailed error messages.
@@ -234,8 +255,8 @@ Configuration is validated using **Zod** schemas at startup. Invalid configurati
 
 ## Testing Strategy
 
-- **Framework:** Vitest
-- **Test Location:** `tests/` directory
+- **Framework:** Vitest v2.1.4
+- **Test Location:** `tests/` directory + `src/__tests__/`
 - **Pattern:** `**/*.test.ts`
 - **Setup:** `tests/setup.ts`
 - **Coverage:** HTML, JSON, text reports
@@ -246,6 +267,14 @@ Configuration is validated using **Zod** schemas at startup. Invalid configurati
 2. **Integration tests:** Packet encoding/decoding (`tests/integration/`)
 3. **Infrastructure tests:** Repositories, EventBus, StateMachine (`tests/new-architecture/infrastructure/`)
 4. **Performance tests:** BufferPool, CacheManager, PacketSerializer (`tests/performance/`)
+5. **GameState tests:** (`src/__tests__/`) - GameState, GameStateUpdater, WsServer
+
+### Test Statistics
+
+- ✅ **168 tests passing**
+- ✅ TypeScript compilation — no errors
+- ✅ No circular dependencies detected
+- ✅ Build successful
 
 ### Test Utilities
 
@@ -264,6 +293,9 @@ DI_TOKENS.CharacterRepository
 DI_TOKENS.WorldRepository
 DI_TOKENS.EventBus
 DI_TOKENS.PacketProcessor
+DI_TOKENS.GameState           // GameState singleton
+DI_TOKENS.GameStateUpdater    // GameStateUpdater middleware
+DI_TOKENS.WsApiServer         // WebSocket Vision API server
 // ... etc
 
 // Usage
@@ -306,6 +338,42 @@ if (result.isOk()) {
 - Movement commands: 10 req/s
 - Combat commands: 5 req/s
 - General read: 100 req/s
+
+## WebSocket Vision API (Port 3001)
+
+Standalone WebSocket API сервер для трансляции игрового состояния в реальном времени.
+
+**Конфигурация (.env):**
+```bash
+WS_ENABLED=true          # Включить WebSocket API
+WS_PORT=3001             # Порт сервера
+WS_AUTH_ENABLED=false    # Авторизация по токену
+WS_AUTH_TOKENS=          # Список токенов через запятую
+WS_MAX_CLIENTS=10        # Максимум клиентов
+WS_BATCH_INTERVAL=50     # Интервал батчинга (мс)
+WS_MOVE_THROTTLE_MS=100  # Троттлинг движения (мс)
+```
+
+**HTTP эндпоинты (порт 3001):**
+- `GET /api/v1/snapshot` - Полный снимок GameState
+- `GET /api/v1/me` - Данные персонажа
+- `GET /api/v1/players` - Список игроков
+- `GET /api/v1/npcs` - Список NPC
+- `GET /api/v1/inventory` - Инвентарь
+- `GET /api/v1/chat` - История чата
+- `GET /api/v1/stats` - Статистика сервера
+- `GET /api/v1/health` - Health check
+
+**Каналы подписки:** `*`, `me`, `players`, `npcs`, `items`, `inventory`, `combat`, `chat`, `party`, `effects`, `target`, `movement`, `skills`
+
+**Оптимизации:**
+- Throttling для `entity.move` (100ms на объект)
+- Batching событий (50ms интервал)
+- Метрики: eventsPerSecond, droppedMoveEvents, totalEventsSent
+
+**Примеры клиентов:**
+- `examples/ws-client-node.js` - Node.js клиент
+- `examples/ws-client-python.py` - Python клиент
 
 ## Adding New Packets
 
