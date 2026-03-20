@@ -45,6 +45,33 @@
     padding: 0 var(--spacing);
 }
 
+/* Dashboard Top Row - 4 panels in one row */
+.dashboard-top-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--spacing);
+    margin-bottom: var(--spacing);
+}
+
+.dashboard-top-row .panel {
+    margin-bottom: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Responsive: 2x2 on tablet, stack on mobile */
+@media (max-width: 1200px) {
+    .dashboard-top-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-top-row {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Header & Navigation */
 header {
     background: var(--l2-bg-panel);
@@ -342,6 +369,58 @@ nav ul:first-child strong {
 .filter-select {
     font-size: 0.85rem;
     padding: 0.25rem 0.5rem;
+}
+
+/* Movement Controls */
+.movement-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.movement-dpad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.movement-middle-row {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25rem;
+}
+
+.movement-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.movement-btn i {
+    width: 20px;
+    height: 20px;
+}
+
+.movement-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.movement-step-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    color: var(--l2-text-muted);
+}
+
+.movement-step-label input[type="range"] {
+    margin: 0;
 }
 
 /* Quick Actions */
