@@ -1,6 +1,6 @@
 # Сводка по репозиторию L2 Headless Client
 
-> Дата: 2026-03-20 (обновлено: Тесты для GameState, GameStateUpdater, WsServer в src/__tests__/)
+> Дата: 2026-03-20 (обновлено: Примеры WebSocket клиентов Node.js/Python, обновлён readme.md)
 > Репозиторий: `c:\MyProg\l2J-Mobius-CT-0-Interlude\`
 > Назначение: Headless Lineage 2 клиент на TypeScript для сервера L2J_Mobius CT_0_Interlude
 
@@ -414,6 +414,44 @@ curl -H "Authorization: Bearer my-token" http://localhost:3001/api/v1/npcs
 curl http://localhost:3001/api/v1/health
 ```
 
+### 9b. Примеры клиентов WebSocket API (NEW)
+
+Созданы готовые примеры клиентов для подключения к WebSocket Vision API:
+
+**Node.js клиент** — `examples/ws-client-node.js`:
+- Цветной вывод в терминал с форматированием
+- Поддержка аргументов `--host`, `--port`, `--token`, `--channels`
+- Автоматический ping/pong каждые 30 секунд
+- Graceful shutdown (Ctrl+C)
+- Обработка всех типов событий с красивым форматированием
+
+```bash
+# Установка ws если не установлен
+npm install ws
+
+# Запуск
+node examples/ws-client-node.js
+node examples/ws-client-node.js --host=192.168.1.100 --port=3001 --token=secret
+node examples/ws-client-node.js --channels='me,chat,combat'
+```
+
+**Python клиент** — `examples/ws-client-python.py`:
+- Asyncio + websockets
+- Цветной вывод с форматированием в рамках
+- argparse с `--host`, `--port`, `--token`, `--channels`
+- Автоматический keepalive
+- Graceful shutdown
+
+```bash
+# Установка зависимостей
+pip install websockets
+
+# Запуск
+python examples/ws-client-python.py
+python examples/ws-client-python.py --host=192.168.1.100 --port=3001 --token=secret
+python examples/ws-client-python.py --channels=me,chat,combat
+```
+
 ### 10. In-Memory Repositories
 
 | Repository | Файл | Хранит |
@@ -453,6 +491,18 @@ curl http://localhost:3001/api/v1/health
   "cors": "^2.8.6"            // CORS middleware
 }
 ```
+
+### 13. Примеры и документация
+
+| Файл | Описание |
+|------|----------|
+| `examples/ws-client-node.js` | WebSocket клиент на Node.js с цветным выводом |
+| `examples/ws-client-python.py` | WebSocket клиент на Python (asyncio) |
+| `examples/GameSession-example.ts` | Пример работы с GameSession |
+| `examples/websocket-integration.ts` | Интеграция WebSocket |
+| `readme.md` | Основная документация проекта (обновлена с WebSocket Vision API) |
+| `docs/DOCUMENTATION.md` | Полная техническая документация |
+| `docs/client_server_protocol.md` | Спецификация протокола |
 
 ---
 
