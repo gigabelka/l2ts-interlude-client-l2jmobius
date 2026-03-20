@@ -6,6 +6,7 @@ class L2ApiClient {
     constructor(baseUrl = '/api/v1') {
         this.baseUrl = baseUrl;
         this.requestId = 0;
+        this.apiKey = new URLSearchParams(window.location.search).get('token') || '';
     }
 
     /**
@@ -27,6 +28,11 @@ class L2ApiClient {
                 'X-Request-Id': this.generateRequestId()
             }
         };
+
+        // Add API key if present
+        if (this.apiKey) {
+            options.headers['Authorization'] = `Bearer ${this.apiKey}`;
+        }
 
         if (data && (method === 'POST' || method === 'PUT')) {
             options.body = JSON.stringify(data);

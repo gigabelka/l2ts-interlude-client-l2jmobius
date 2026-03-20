@@ -9,7 +9,7 @@ import type { WebSocket as WebSocketType, WebSocketServer as WebSocketServerType
 import ws = require('ws');
 const WebSocketServer = ws.WebSocketServer;
 const WebSocket = ws.WebSocket;
-import { parse } from 'url';
+// import { parse } from 'url';  // Temporarily disabled
 import type { IncomingMessage, Server } from 'http';
 import { API_CONFIG } from '../../config';
 import { Logger } from '../../logger/Logger';
@@ -131,7 +131,11 @@ export class WsServerNew {
         }
     }
 
-    private verifyClient(info: { req: IncomingMessage }): boolean {
+    private verifyClient(_info: { req: IncomingMessage }): boolean {
+        // API_KEY authentication temporarily disabled
+        return true;
+
+        /* Original authentication code - temporarily disabled
         if (!API_CONFIG.apiKey) {
             return true;
         }
@@ -145,6 +149,7 @@ export class WsServerNew {
         }
 
         return true;
+        */
     }
 
     private handleConnection(ws: WebSocketType, req: IncomingMessage): void {

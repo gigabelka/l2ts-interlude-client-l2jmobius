@@ -56,7 +56,9 @@ export class ApiServer {
                     connectSrc: [
                         "'self'",
                         "ws://localhost:*",
-                        "wss://localhost:*"
+                        "wss://localhost:*",
+                        "ws://*:*",
+                        "wss://*:*"
                     ],
                     imgSrc: ["'self'", "data:", "blob:", "https:"],
                     fontSrc: ["'self'", "cdn.jsdelivr.net", "unpkg.com"]

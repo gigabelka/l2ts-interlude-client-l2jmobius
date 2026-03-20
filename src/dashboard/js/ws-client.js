@@ -32,12 +32,16 @@ class L2WsClient extends EventTarget {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const host = window.location.hostname;
         
+        // Get token from URL query param
+        const token = new URLSearchParams(window.location.search).get('token');
+        const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+        
         if (this.mode === 'standalone') {
-            return `${protocol}//${host}:8080`;
+            return `${protocol}//${host}:8080${tokenParam}`;
         }
         
         // Shared mode - use same port as HTTP
-        return `${protocol}//${window.location.host}/ws`;
+        return `${protocol}//${window.location.host}/ws${tokenParam}`;
     }
     
     /**
