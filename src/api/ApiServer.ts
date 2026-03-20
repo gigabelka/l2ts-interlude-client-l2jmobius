@@ -93,19 +93,9 @@ export class ApiServer {
             maxAge: process.env['NODE_ENV'] === 'production' ? '1d' : 0
         }));
         
-        // OpenAPI spec endpoint
-        this.app.get('/openapi.json', (_req: Request, res: Response) => {
-            res.sendFile(path.join(dashboardPath, 'openapi.json'));
-        });
-        
-        // Dashboard routes - serve index.html for all dashboard routes
-        this.app.get(['/', '/inventory', '/combat'], (_req: Request, res: Response) => {
+        // Dashboard routes - serve index.html for root and known routes
+        this.app.get(['/', '/inventory', '/skills'], (_req: Request, res: Response) => {
             res.sendFile(path.join(dashboardPath, 'index.html'));
-        });
-        
-        // API Docs (Scalar) - separate HTML file
-        this.app.get('/api-docs', (_req: Request, res: Response) => {
-            res.sendFile(path.join(dashboardPath, 'api-docs.html'));
         });
 
         // Health check (no auth required)

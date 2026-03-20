@@ -1,5 +1,5 @@
 /**
- * L2 Bot Dashboard - Main Application
+ * L2 Bot Dashboard - Main Application (Simplified)
  */
 
 class DashboardApp {
@@ -10,15 +10,12 @@ class DashboardApp {
         this.statusCheckInterval = null;
         this.lastWsActivity = 0;
         this.isInGame = false;
-        // console.log('[DashboardApp] Constructor called');
     }
 
     /**
      * Initialize the dashboard
      */
     init() {
-        // console.log('[DashboardApp] Initializing...');
-        
         // Check dependencies
         if (typeof lucide === 'undefined') {
             console.error('[DashboardApp] Lucide not loaded!');
@@ -31,9 +28,6 @@ class DashboardApp {
         }
         if (typeof statusPanel === 'undefined') {
             console.error('[DashboardApp] statusPanel not loaded!');
-        }
-        if (typeof eventLog === 'undefined') {
-            console.error('[DashboardApp] eventLog not loaded!');
         }
         
         // Initialize Lucide icons
@@ -60,15 +54,12 @@ class DashboardApp {
         
         // Initial status update
         this.updateConnectionStatus();
-        
-        // console.log('[DashboardApp] Initialization complete');
     }
 
     /**
      * Setup navigation tabs
      */
     setupNavigation() {
-        // console.log('[DashboardApp] Setting up navigation');
         const navLinks = document.querySelectorAll('.nav-link');
         
         navLinks.forEach(link => {
@@ -99,10 +90,6 @@ class DashboardApp {
         this.currentTab = tab;
         
         // Special handling for specific tabs
-        if (tab === 'api-docs') {
-            this.loadApiDocs();
-        }
-        
         if (tab === 'skills') {
             // Refresh skills when switching to skills tab
             if (typeof skillsPanel !== 'undefined') {
@@ -127,76 +114,51 @@ class DashboardApp {
      * Setup quick action buttons with enhanced functionality
      */
     setupQuickActions() {
-        // console.log('[DashboardApp] Setting up quick actions');
-        
         // Toggle Connect button (Connect/Disconnect)
         const btnToggleConnect = document.getElementById('btn-toggle-connect');
         if (btnToggleConnect) {
             btnToggleConnect.addEventListener('click', () => this.handleToggleConnect());
-        } else {
-            console.warn('[DashboardApp] Toggle Connect button not found');
         }
         
         // Attack button - toggle attack
         const btnAttack = document.getElementById('btn-attack');
         if (btnAttack) {
             btnAttack.addEventListener('click', () => this.handleAttack());
-            // console.log('[DashboardApp] Attack button bound');
-        } else {
-            console.warn('[DashboardApp] Attack button not found');
         }
         
         // Next Target button
         const btnNextTarget = document.getElementById('btn-next-target');
         if (btnNextTarget) {
             btnNextTarget.addEventListener('click', () => this.handleNextTarget());
-            console.log('[DashboardApp] Next Target button bound');
-        } else {
-            console.warn('[DashboardApp] Next Target button not found');
         }
         
         // Pickup button
         const btnPickup = document.getElementById('btn-pickup');
         if (btnPickup) {
             btnPickup.addEventListener('click', () => this.handlePickup());
-            // console.log('[DashboardApp] Pickup button bound');
-        } else {
-            console.warn('[DashboardApp] Pickup button not found');
         }
         
         // Sit button - toggle sit/stand
         const btnSit = document.getElementById('btn-sit');
         if (btnSit) {
             btnSit.addEventListener('click', () => this.handleSit());
-            // console.log('[DashboardApp] Sit button bound');
-        } else {
-            console.warn('[DashboardApp] Sit button not found');
         }
         
         // Chat button
         const btnChat = document.getElementById('btn-chat');
         if (btnChat) {
             btnChat.addEventListener('click', () => this.handleChat());
-            // console.log('[DashboardApp] Chat button bound');
-        } else {
-            console.warn('[DashboardApp] Chat button not found');
         }
         
         // Target actions
         const btnTargetAttack = document.getElementById('btn-target-attack');
         if (btnTargetAttack) {
             btnTargetAttack.addEventListener('click', () => this.handleTargetAttack());
-            // console.log('[DashboardApp] Target Attack button bound');
-        } else {
-            console.warn('[DashboardApp] Target Attack button not found');
         }
         
         const btnTargetSkill = document.getElementById('btn-target-skill');
         if (btnTargetSkill) {
             btnTargetSkill.addEventListener('click', () => this.handleTargetSkill());
-            // console.log('[DashboardApp] Target Skill button bound');
-        } else {
-            console.warn('[DashboardApp] Target Skill button not found');
         }
         
         // Movement buttons
@@ -306,40 +268,31 @@ class DashboardApp {
      */
     async handleMove(direction) {
         if (!this.isInGame) {
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('⚠️ Not in game');
-            }
+            console.warn('[DashboardApp] Not in game, cannot move');
             return;
         }
         
         const currentPos = this.getCurrentPosition();
         if (!currentPos) {
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('⚠️ Position unknown, cannot move');
-            }
+            console.warn('[DashboardApp] Position unknown, cannot move');
             return;
         }
         
         const step = this.getMovementStep();
         let newPos = { ...currentPos };
-        let directionName = '';
         
         switch(direction) {
             case 'forward':
                 newPos.y -= step;
-                directionName = 'forward';
                 break;
             case 'backward':
                 newPos.y += step;
-                directionName = 'backward';
                 break;
             case 'left':
                 newPos.x -= step;
-                directionName = 'left';
                 break;
             case 'right':
                 newPos.x += step;
-                directionName = 'right';
                 break;
         }
         
@@ -348,16 +301,10 @@ class DashboardApp {
                 throw new Error('API client not available');
             }
             
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`🚶 Moving ${directionName} (${step} units)`);
-            }
-            
+            console.log(`[DashboardApp] Moving ${direction} (${step} units)`);
             await apiClient.moveTo(newPos.x, newPos.y, newPos.z);
         } catch (error) {
             console.error('[DashboardApp] Move error:', error);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Move failed: ${error.message}`);
-            }
         }
     }
 
@@ -373,14 +320,9 @@ class DashboardApp {
             }
             
             await apiClient.stopMove();
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('🛑 Stopped');
-            }
+            console.log('[DashboardApp] Stopped');
         } catch (error) {
             console.error('[DashboardApp] Stop move error:', error);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Stop failed: ${error.message}`);
-            }
         }
     }
 
@@ -393,29 +335,18 @@ class DashboardApp {
             return;
         }
         
-        // console.log('[DashboardApp] Setting up WebSocket handlers');
-        
         wsClient.addEventListener('connected', () => {
-            // console.log('[DashboardApp] WS connected');
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('WebSocket connected');
-            }
+            console.log('[DashboardApp] WebSocket connected');
             this.updateConnectionStatus();
         });
         
         wsClient.addEventListener('disconnected', () => {
-            console.log('[DashboardApp] WS disconnected');
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('WebSocket disconnected');
-            }
+            console.log('[DashboardApp] WebSocket disconnected');
             this.updateConnectionStatus();
         });
         
         wsClient.addEventListener('error', (e) => {
             console.error('[DashboardApp] WS error:', e.detail);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`WebSocket error: ${e.detail}`);
-            }
         });
         
         wsClient.addEventListener('any', () => {
@@ -424,14 +355,11 @@ class DashboardApp {
         
         // System events for connection status
         wsClient.addEventListener('system.connected', (e) => {
-            // console.log('[DashboardApp] System connected:', e.detail);
             this.connectionStatus = e.detail?.phase || 'IN_GAME';
             this.isInGame = this.connectionStatus === 'IN_GAME';
             this.updateConnectionStatus();
             this.updateActionButtons();
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`🎮 Connected to game: ${e.detail?.characterName || 'Unknown'}`);
-            }
+            console.log('[DashboardApp] Connected to game:', e.detail?.characterName || 'Unknown');
         });
         
         wsClient.addEventListener('system.disconnected', (e) => {
@@ -444,7 +372,6 @@ class DashboardApp {
 
         // Granular connection phase updates
         wsClient.addEventListener('connection.phase_changed', (e) => {
-            // console.log('[DashboardApp] Phase changed:', e.detail);
             if (e.detail && e.detail.phase) {
                 this.connectionStatus = e.detail.phase;
                 this.isInGame = this.connectionStatus === 'IN_GAME';
@@ -454,7 +381,6 @@ class DashboardApp {
         });
 
         // Initial connection
-        // console.log('[DashboardApp] Connecting WebSocket...');
         wsClient.connect();
     }
 
@@ -462,8 +388,6 @@ class DashboardApp {
      * Start status polling
      */
     startStatusPolling() {
-        // console.log('[DashboardApp] Starting status polling');
-        
         // Start character status polling
         if (typeof statusPanel !== 'undefined') {
             statusPanel.start();
@@ -487,7 +411,6 @@ class DashboardApp {
      * Start ping monitor
      */
     startPingMonitor() {
-        // console.log('[DashboardApp] Starting ping monitor');
         this.pingInterval = setInterval(() => {
             this.measurePing();
         }, 5000);
@@ -504,7 +427,6 @@ class DashboardApp {
             }
             
             const status = await apiClient.getStatus();
-            // console.log('[DashboardApp] Status received:', status);
             
             this.connectionStatus = status.phase || 'DISCONNECTED';
             this.isInGame = this.connectionStatus === 'IN_GAME';
@@ -558,8 +480,6 @@ class DashboardApp {
         statusEl.classList.add(statusClass);
         const span = statusEl.querySelector('span');
         if (span) span.textContent = statusText;
-        
-        // console.log('[DashboardApp] Connection status updated:', statusText);
     }
 
     /**
@@ -567,9 +487,6 @@ class DashboardApp {
      */
     updateActionButtons() {
         const isInGame = this.isInGame;
-        const isDisconnected = this.connectionStatus === 'DISCONNECTED' || this.connectionStatus === 'ERROR';
-        
-        // console.log('[DashboardApp] Updating action buttons - inGame:', isInGame, 'disconnected:', isDisconnected);
         
         // Combat buttons - only enabled when in game
         const combatButtons = ['btn-attack', 'btn-next-target', 'btn-pickup', 'btn-sit', 'btn-chat'];
@@ -693,16 +610,9 @@ class DashboardApp {
             let displayName = target.name;
             let displayLevel = target.level;
             
-            console.log('[updateTargetDisplay] target:', target, 'npcId:', target.npcId, 'type:', typeof target.npcId);
-            
             if (target.type === 'NPC' && target.npcId && typeof npcDatabase !== 'undefined') {
-                // Convert npcId to number (keys in Map are numbers)
                 const npcIdNum = parseInt(target.npcId);
-                console.log('[updateTargetDisplay] Looking up npcId:', npcIdNum);
-                
                 const dbName = npcDatabase.getNpcName(npcIdNum);
-                console.log('[updateTargetDisplay] dbName:', dbName);
-                
                 if (dbName) {
                     displayName = dbName;
                 }
@@ -741,9 +651,6 @@ class DashboardApp {
         if (isDisconnected) {
             // Connect
             console.log('[DashboardApp] Handle Connect clicked');
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('🔄 Connecting to game server...');
-            }
             
             this.setButtonLoading('btn-toggle-connect', true);
             try {
@@ -752,23 +659,14 @@ class DashboardApp {
                 }
                 const result = await apiClient.connect();
                 console.log('[DashboardApp] Connect result:', result);
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage('✅ Connection initiated successfully');
-                }
             } catch (error) {
                 console.error('[DashboardApp] Connect error:', error);
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage(`❌ Connection failed: ${error.message}`);
-                }
             } finally {
                 this.setButtonLoading('btn-toggle-connect', false);
             }
         } else {
             // Disconnect
             console.log('[DashboardApp] Handle Disconnect clicked');
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('🔄 Disconnecting...');
-            }
             
             this.setButtonLoading('btn-toggle-connect', true);
             try {
@@ -776,16 +674,11 @@ class DashboardApp {
                     throw new Error('API client not available');
                 }
                 await apiClient.disconnect();
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage('✅ Disconnected from game server');
-                }
+                console.log('[DashboardApp] Disconnected from game server');
                 this.isInGame = false;
                 this.updateActionButtons();
             } catch (error) {
                 console.error('[DashboardApp] Disconnect error:', error);
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage(`❌ Disconnect error: ${error.message}`);
-                }
             } finally {
                 this.setButtonLoading('btn-toggle-connect', false);
             }
@@ -804,9 +697,7 @@ class DashboardApp {
             
             if (isAttacking) {
                 await apiClient.stopAttack();
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage('🛑 Stopped attacking');
-                }
+                console.log('[DashboardApp] Stopped attacking');
                 if (btnAttack) {
                     btnAttack.classList.remove('active');
                     btnAttack.innerHTML = '<i data-lucide="sword"></i> Attack';
@@ -814,9 +705,7 @@ class DashboardApp {
                 }
             } else {
                 await apiClient.attack();
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage('⚔️ Started attacking');
-                }
+                console.log('[DashboardApp] Started attacking');
                 if (btnAttack) {
                     btnAttack.classList.add('active');
                     btnAttack.innerHTML = '<i data-lucide="square"></i> Stop';
@@ -825,9 +714,6 @@ class DashboardApp {
             }
         } catch (error) {
             console.error('[DashboardApp] Attack error:', error);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Attack failed: ${error.message}`);
-            }
         }
     }
 
@@ -851,17 +737,12 @@ class DashboardApp {
                 if (dbLevel) displayLevel = dbLevel;
             }
             
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`🎯 Target: ${displayName} (Lv.${displayLevel}, ${target.distance?.toFixed(1)}m)`);
-            }
+            console.log(`[DashboardApp] Target: ${displayName} (Lv.${displayLevel}, ${target.distance?.toFixed(1)}m)`);
             
             // Update target UI (pass original target with npcId for proper lookup)
             this.updateTargetDisplay(target);
         } catch (error) {
             console.error('[DashboardApp] Next target error:', error);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Next target failed: ${error.message}`);
-            }
         } finally {
             this.setButtonLoading('btn-next-target', false);
         }
@@ -882,19 +763,12 @@ class DashboardApp {
                 // Pick up the closest item
                 const item = items[0];
                 await apiClient.pickupItem(item.objectId);
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage(`📦 Moving to pickup ${item.name || 'item'} x${item.count || 1}`);
-                }
+                console.log(`[DashboardApp] Moving to pickup ${item.name || 'item'} x${item.count || 1}`);
             } else {
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage('ℹ️ No items nearby to pickup');
-                }
+                console.log('[DashboardApp] No items nearby to pickup');
             }
         } catch (error) {
             console.error('[DashboardApp] Pickup error:', error);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Pickup failed: ${error.message}`);
-            }
         } finally {
             this.setButtonLoading('btn-pickup', false);
         }
@@ -912,18 +786,14 @@ class DashboardApp {
             
             await apiClient.toggleSit(isSitting); // true = stand, false = sit
             if (isSitting) {
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage('🧍 Standing up');
-                }
+                console.log('[DashboardApp] Standing up');
                 if (btnSit) {
                     btnSit.classList.remove('active');
                     btnSit.innerHTML = '<i data-lucide="armchair"></i> Sit/Stand';
                     if (typeof lucide !== 'undefined') lucide.createIcons();
                 }
             } else {
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage('💺 Sitting down');
-                }
+                console.log('[DashboardApp] Sitting down');
                 if (btnSit) {
                     btnSit.classList.add('active');
                     btnSit.innerHTML = '<i data-lucide="user"></i> Sit/Stand';
@@ -932,9 +802,6 @@ class DashboardApp {
             }
         } catch (error) {
             console.error('[DashboardApp] Sit error:', error);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Sit/Stand failed: ${error.message}`);
-            }
         }
     }
 
@@ -950,14 +817,9 @@ class DashboardApp {
                 }
                 
                 await apiClient.sendChat(result.channel, result.message);
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage(`💬 [${result.channel}] ${result.message}`);
-                }
+                console.log(`[DashboardApp] Chat [${result.channel}]: ${result.message}`);
             } catch (error) {
                 console.error('[DashboardApp] Chat error:', error);
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage(`❌ Chat failed: ${error.message}`);
-                }
             }
         }
     }
@@ -1049,9 +911,7 @@ class DashboardApp {
         if (targetInfo && !targetInfo.classList.contains('hidden')) {
             await this.handleAttack();
         } else {
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('⚠️ No target selected');
-            }
+            console.warn('[DashboardApp] No target selected');
         }
     }
 
@@ -1059,9 +919,7 @@ class DashboardApp {
         console.log('[DashboardApp] Handle Target Skill clicked');
         const targetInfo = document.getElementById('target-details');
         if (!targetInfo || targetInfo.classList.contains('hidden')) {
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage('⚠️ No target selected');
-            }
+            console.warn('[DashboardApp] No target selected');
             return;
         }
         
@@ -1073,9 +931,7 @@ class DashboardApp {
             
             const skills = await apiClient.getSkills();
             if (!skills || skills.length === 0) {
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage('ℹ️ No skills available');
-                }
+                console.log('[DashboardApp] No skills available');
                 return;
             }
             
@@ -1083,15 +939,10 @@ class DashboardApp {
             if (skillId) {
                 const skillName = this.getSkillName(skillId) || `Skill #${skillId}`;
                 await apiClient.useSkill(skillId, 1);
-                if (typeof eventLog !== 'undefined') {
-                    eventLog.addSystemMessage(`✨ Using skill: ${skillName}`);
-                }
+                console.log(`[DashboardApp] Using skill: ${skillName}`);
             }
         } catch (error) {
             console.error('[DashboardApp] Skill error:', error);
-            if (typeof eventLog !== 'undefined') {
-                eventLog.addSystemMessage(`❌ Skill error: ${error.message}`);
-            }
         }
     }
 
@@ -1186,40 +1037,11 @@ class DashboardApp {
             });
         });
     }
-
-    /**
-     * Load API Documentation (Scalar)
-     */
-    loadApiDocs() {
-        const container = document.getElementById('scalar-container');
-        if (!container || container.dataset.loaded) return;
-        
-        // Load Scalar API reference
-        const script = document.createElement('script');
-        script.id = 'api-reference';
-        script.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';
-        script.dataset.configuration = JSON.stringify({
-            url: '/openapi.json',
-            theme: 'kepler',
-            layout: 'modern',
-            hideDarkModeToggle: false,
-            defaultHttpClient: {
-                targetKey: 'js',
-                clientKey: 'fetch'
-            }
-        });
-        
-        container.innerHTML = '';
-        container.appendChild(script);
-        container.dataset.loaded = 'true';
-    }
 }
 
 // Initialize when DOM is ready
 console.log('[DashboardApp] Script loaded, waiting for DOM...');
 document.addEventListener('DOMContentLoaded', () => {
-    // console.log('[DashboardApp] DOM ready, initializing...');
     window.dashboard = new DashboardApp();
     window.dashboard.init();
-    // console.log('[DashboardApp] Initialization finished');
 });
