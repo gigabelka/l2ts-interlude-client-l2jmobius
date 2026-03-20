@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GameClientNew } from '../../src/game/GameClient';
-import { GameState } from '../../src/game/GameState';
+import { GameClientState } from '../../src/game/GameClientState';
 import { SessionData } from '../../src/login/types';
 import type { INetworkConnection } from '../../src/network/INetworkConnection';
 import { GamePacketProcessor } from '../../src/infrastructure/protocol/game/GamePacketProcessor';
@@ -76,7 +76,7 @@ describe('PacketProcessor Fallback', () => {
 
     it('should fallback to handleHandshakePacket when opcode 0x04 is received in WAIT_CHAR_LIST state', () => {
         // 1. Set state to WAIT_CHAR_LIST
-        (gameClient as any).state = GameState.WAIT_CHAR_LIST;
+        (gameClient as any).state = GameClientState.WAIT_CHAR_LIST;
 
         // 2. Prepare data for 0x04 (CharList in handshake, but UserInfo in registry)
         const data = Buffer.alloc(10);
@@ -99,7 +99,7 @@ describe('PacketProcessor Fallback', () => {
 
         // 6. Verify expectations
         // PacketProcessor should return success: true (factory knows 0x04) but handlerExecuted: false (state mismatch)
-        const result = packetProcessor.process(0x04, data, GameState.WAIT_CHAR_LIST);
+        const result = packetProcessor.process(0x04, data, GameClientState.WAIT_CHAR_LIST);
         expect(result.success).toBe(true);
         expect(result.handlerExecuted).toBe(false);
 
@@ -107,12 +107,12 @@ describe('PacketProcessor Fallback', () => {
         expect(handshakeSpy).toHaveBeenCalledWith(0x04, data);
         
         // State should have transitioned to WAIT_CHAR_SELECTED (because handleHandshakePacket processes 0x04 in WAIT_CHAR_LIST)
-        expect(gameClient.getState()).toBe(GameState.WAIT_CHAR_SELECTED);
+        expect(gameClient.getState()).toBe(GameClientState.WAIT_CHAR_SELECTED);
     });
 
     it('should NOT fallback when opcode 0x04 is received in WAIT_USER_INFO state', () => {
         // 1. Set state to WAIT_USER_INFO
-        (gameClient as any).state = GameState.WAIT_USER_INFO;
+        (gameClient as any).state = GameClientState.WAIT_USER_INFO;
 
         // 2. Prepare data for UserInfo
         const data = Buffer.alloc(200);

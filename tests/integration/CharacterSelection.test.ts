@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GameClientNew } from '../../src/game/GameClient';
 import { getContainer, resetContainer } from '../../src/config/di/appContainer';
-import { GameState } from '../../src/game/GameState';
+import { GameClientState } from '../../src/game/GameClientState';
 import { SessionData } from '../../src/login/types';
 import type { INetworkConnection } from '../../src/network/INetworkConnection';
 
@@ -61,7 +61,7 @@ describe('GameClient Selection Flow', () => {
 
     it('should transition to WAIT_CHAR_SELECTED after receiving CharSelectInfo (0x13)', () => {
         // 1. Manually set state to WAIT_CHAR_LIST
-        (gameClient as any).state = GameState.WAIT_CHAR_LIST;
+        (gameClient as any).state = GameClientState.WAIT_CHAR_LIST;
 
         // 2. Simulate receiving 0x13 (CharSelectInfo)
         const charSelectInfo = Buffer.alloc(10);
@@ -71,12 +71,12 @@ describe('GameClient Selection Flow', () => {
         // This should trigger CharacterSelected and move to WAIT_CHAR_SELECTED
         (gameClient as any).handleHandshakePacket(0x13, charSelectInfo);
         
-        expect((gameClient as any).state).toBe(GameState.WAIT_CHAR_SELECTED);
+        expect((gameClient as any).state).toBe(GameClientState.WAIT_CHAR_SELECTED);
     });
 
     it('should transition to WAIT_USER_INFO after receiving CharSelected (0x15)', () => {
         // 1. Manually set state to WAIT_CHAR_SELECTED (simulating previous step)
-        (gameClient as any).state = GameState.WAIT_CHAR_SELECTED;
+        (gameClient as any).state = GameClientState.WAIT_CHAR_SELECTED;
 
         // 2. Simulate receiving 0x15 (CharSelected)
         const charSelected = Buffer.alloc(1);
@@ -85,6 +85,6 @@ describe('GameClient Selection Flow', () => {
         // This should trigger handleCharSelected and move to WAIT_USER_INFO
         (gameClient as any).handleHandshakePacket(0x15, charSelected);
         
-        expect((gameClient as any).state).toBe(GameState.WAIT_USER_INFO);
+        expect((gameClient as any).state).toBe(GameClientState.WAIT_USER_INFO);
     });
 });

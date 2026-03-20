@@ -5,7 +5,7 @@
  */
 
 import { Logger } from '../logger/Logger';
-import { GameState } from './GameState';
+import { GameClientState } from './GameClientState';
 import type { SessionData } from '../login/types';
 import { GameCrypt } from './GameCrypt';
 import { CONFIG } from '../config';
@@ -52,7 +52,7 @@ export interface GameClientDependencies {
  * Использует композицию вместо наследования для лучшей тестируемости
  */
 export class GameClientNew implements IGameClient {
-    private state: GameState = GameState.IDLE;
+    private state: GameClientState = GameClientState.IDLE;
     private crypt: GameCrypt = new GameCrypt();
     private deps: GameClientDependencies;
     private inventoryRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -81,9 +81,9 @@ export class GameClientNew implements IGameClient {
 
     start(): Result<void, Error> {
         try {
-            Logger.logState(this.state, GameState.CONNECTING);
+            Logger.logState(this.state, GameClientState.CONNECTING);
             Logger.info('GameClient', `Connecting to Game Server: ${this.session.gameServerIp}:${this.session.gameServerPort}`);
-            this.state = GameState.CONNECTING;
+            this.state = GameClientState.CONNECTING;
 
             // Initialize services
             this.deps.commandManager.setGameClient(this);
@@ -96,15 +96,15 @@ export class GameClientNew implements IGameClient {
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             Logger.error('GameClient', `Failed to start: ${message}`);
-            this.state = GameState.ERROR;
+            this.state = GameClientState.ERROR;
             return Result.err(new Error(`Failed to start GameClient: ${message}`));
         }
     }
 
     private handleConnect(): void {
         Logger.info('GameClient', 'Connected to Game Server');
-        Logger.logState(this.state, GameState.WAIT_CRYPT_INIT);
-        this.state = GameState.WAIT_CRYPT_INIT;
+        Logger.logState(this.state, GameClientState.WAIT_CRYPT_INIT);
+        this.state = GameClientState.WAIT_CRYPT_INIT;
 
         const pv = new ProtocolVersion();
         this.sendPacketRawBuffer(pv.encode());
@@ -132,7 +132,7 @@ export class GameClientNew implements IGameClient {
 
     private handleError(err: Error): void {
         Logger.error('GameClient', `*** GAME SERVER ERROR: ${err.message} ***`);
-        this.state = GameState.ERROR;
+        this.state = GameClientState.ERROR;
         this.publishConnectionState(ConnectionPhase.ERROR);
         this.deps.connectionRepo.update({ error: err.message });
         this.publishErrorEvent(err.message);
@@ -169,20 +169,20 @@ export class GameClientNew implements IGameClient {
     private handlePacket(_packet: unknown, opcode: number): void {
         // Post-processing for state transitions
         switch (this.state) {
-            case GameState.WAIT_CHAR_SELECTED:
+            case GameClientState.WAIT_CHAR_SELECTED:
                 if (opcode === 0x04) {
                     Logger.info('GameClient', 'Server skipped CharSelected (0x15) confirmation. Transitioning to UserInfo.');
                     this.handleCharSelected();
                     this.onUserInfoReceived(opcode);
                 }
                 break;
-            case GameState.WAIT_USER_INFO:
+            case GameClientState.WAIT_USER_INFO:
                 if (opcode === 0x04) {
                     this.onUserInfoReceived(opcode);
                 }
                 break;
 
-            case GameState.IN_GAME:
+            case GameClientState.IN_GAME:
                 // Handle ping - moved to handleHandshakePacket where body is accessible
                 break;
         }
@@ -192,7 +192,7 @@ export class GameClientNew implements IGameClient {
         Logger.info('GameClient', `handleHandshakePacket: opcode=0x${opcode.toString(16).padStart(2, '0')} state=${this.state}`);
         // Handle handshake packets that aren't in the new processor yet
         switch (this.state) {
-            case GameState.WAIT_CRYPT_INIT: {
+            case GameClientState.WAIT_CRYPT_INIT: {
                 if (opcode !== 0x00 && opcode !== 0x2D) {
                     Logger.warn('GameClient', `Expected CryptInit, got 0x${opcode.toString(16)}`);
                     return;
@@ -218,12 +218,12 @@ export class GameClientNew implements IGameClient {
                 Logger.info('GameClient', 'Sending AuthLogin (0x08)...');
                 this.sendPacket(new AuthRequest(this.session, CONFIG.Username));
 
-                Logger.logState(this.state, GameState.WAIT_CHAR_LIST);
-                this.state = GameState.WAIT_CHAR_LIST;
+                Logger.logState(this.state, GameClientState.WAIT_CHAR_LIST);
+                this.state = GameClientState.WAIT_CHAR_LIST;
                 return;
             }
 
-            case GameState.WAIT_CHAR_LIST: {
+            case GameClientState.WAIT_CHAR_LIST: {
                 if (opcode === 0x04 || opcode === 0x13 || opcode === 0x2C) {
                     // CharSelectInfo received
                     const charCount = body.readUInt32LE(1);
@@ -233,14 +233,14 @@ export class GameClientNew implements IGameClient {
                     Logger.info('GameClient', `Sending CharacterSelect for slot ${CONFIG.CharSlotIndex}...`);
                     this.sendPacket(new CharacterSelected(CONFIG.CharSlotIndex));
 
-                    Logger.logState(this.state, GameState.WAIT_CHAR_SELECTED);
-                    this.state = GameState.WAIT_CHAR_SELECTED;
+                    Logger.logState(this.state, GameClientState.WAIT_CHAR_SELECTED);
+                    this.state = GameClientState.WAIT_CHAR_SELECTED;
                     this.publishConnectionState(ConnectionPhase.SELECTING_CHARACTER);
                 }
                 return;
             }
 
-            case GameState.WAIT_CHAR_SELECTED: {
+            case GameClientState.WAIT_CHAR_SELECTED: {
                 if (opcode === 0x15) {
                     // CharSelected confirmation
                     Logger.info('GameClient', 'CharSelected confirmation received');
@@ -251,7 +251,7 @@ export class GameClientNew implements IGameClient {
 
             default:
                 // Handle NetPingRequest (0xD3) in any state when in game
-                if (opcode === 0xD3 && this.state === GameState.IN_GAME) {
+                if (opcode === 0xD3 && this.state === GameClientState.IN_GAME) {
                     // NetPingRequest - respond with pong
                     // Packet structure: opcode (1) + pingId (4 bytes, int32LE)
                     const pingId = body.readInt32LE(1);
@@ -267,8 +267,8 @@ export class GameClientNew implements IGameClient {
     }
 
     private handleCharSelected(): void {
-        Logger.logState(this.state, GameState.WAIT_USER_INFO);
-        this.state = GameState.WAIT_USER_INFO;
+        Logger.logState(this.state, GameClientState.WAIT_USER_INFO);
+        this.state = GameClientState.WAIT_USER_INFO;
 
         // Send EnterWorld sequence
         this.sendPacketRawBuffer(Buffer.from([0x9D]));
@@ -323,7 +323,7 @@ export class GameClientNew implements IGameClient {
     /**
      * Get current connection state
      */
-    getState(): GameState {
+    getState(): GameClientState {
         return this.state;
     }
 
@@ -410,8 +410,8 @@ export class GameClientNew implements IGameClient {
         const char = this.deps.characterRepo.get();
         if (char) {
             Logger.info('GameClient', `ENTERED GAME WORLD AS: ${char.name}`);
-            Logger.logState(this.state, GameState.IN_GAME);
-            this.state = GameState.IN_GAME;
+            Logger.logState(this.state, GameClientState.IN_GAME);
+            this.state = GameClientState.IN_GAME;
 
             this.publishConnectionState(ConnectionPhase.IN_GAME);
             this.publishConnectedEvent(char.name);
