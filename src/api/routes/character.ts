@@ -20,12 +20,9 @@ router.get('/', (req: Request, res: Response) => {
     const character = charRepo.get();
 
     if (!character) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character not in game or data not yet received'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -76,12 +73,9 @@ router.get('/stats', (req: Request, res: Response) => {
     const character = charRepo.get();
 
     if (!character) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character not in game or data not yet received'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -123,12 +117,9 @@ router.get('/buffs', (req: Request, res: Response) => {
     const character = charRepo.get();
 
     if (!character) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character not in game or data not yet received'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -167,12 +158,9 @@ router.get('/skills', (req: Request, res: Response) => {
     const character = charRepo.get();
 
     if (!character) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character not in game or data not yet received'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId

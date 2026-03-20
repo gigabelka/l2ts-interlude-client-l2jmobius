@@ -301,12 +301,9 @@ router.post('/use', (req: Request, res: Response) => {
             }
         });
     } else {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'COMMAND_FAILED',
-                message: 'Failed to send use item command - not in game'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -430,12 +427,9 @@ router.post('/drop', (req: Request, res: Response) => {
             }
         });
     } else {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'COMMAND_FAILED',
-                message: 'Failed to send drop item command - not in game or position unknown'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId

@@ -48,12 +48,9 @@ router.post('/sit', (req: Request, res: Response) => {
             }
         });
     } else {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'COMMAND_FAILED',
-                message: 'Failed to toggle sit/stand - not in game'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -118,12 +115,9 @@ router.post('/action', (req: Request, res: Response) => {
             }
         });
     } else {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'COMMAND_FAILED',
-                message: 'Failed to send social action - not in game'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId

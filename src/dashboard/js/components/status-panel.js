@@ -117,6 +117,14 @@ class StatusPanel {
             // console.log('[StatusPanel] Fetching character data...');
             const data = await apiClient.getCharacter();
             // console.log('[StatusPanel] Character data received:', data);
+            
+            if (!data) {
+                // Character not in game yet
+                this.isConnected = false;
+                this.showDisconnected();
+                return;
+            }
+            
             this.render(data);
             this.lastData = data;
             this.isConnected = true;

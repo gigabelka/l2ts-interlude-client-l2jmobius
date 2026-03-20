@@ -30,12 +30,9 @@ router.get('/npcs', (req: Request, res: Response) => {
 
     const character = charRepo.get();
     if (!character) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character not in game'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
         });
         return;
@@ -165,12 +162,9 @@ router.get('/players', (req: Request, res: Response) => {
 
     const character = charRepo.get();
     if (!character) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character not in game'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
         });
         return;
@@ -211,12 +205,9 @@ router.get('/items', (req: Request, res: Response) => {
 
     const character = charRepo.get();
     if (!character) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character not in game'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: { timestamp: new Date().toISOString(), requestId: req.requestId }
         });
         return;

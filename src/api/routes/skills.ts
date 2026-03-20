@@ -138,12 +138,9 @@ router.post('/use', (req: Request, res: Response) => {
             }
         });
     } else {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'COMMAND_FAILED',
-                message: 'Failed to send skill use command - not in game'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId

@@ -24,12 +24,9 @@ router.post('/to', moveRateLimitMiddleware, (req: Request, res: Response) => {
     const character = getCharRepo().get();
 
     if (!character?.position) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character position not available'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -78,12 +75,9 @@ router.post('/to', moveRateLimitMiddleware, (req: Request, res: Response) => {
             }
         });
     } else {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'COMMAND_FAILED',
-                message: 'Failed to send move command - not in game or position unknown'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -100,12 +94,9 @@ router.post('/stop', moveRateLimitMiddleware, (req: Request, res: Response) => {
     const character = getCharRepo().get();
 
     if (!character?.position) {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'NOT_IN_GAME',
-                message: 'Character position not available'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -131,12 +122,9 @@ router.post('/stop', moveRateLimitMiddleware, (req: Request, res: Response) => {
             }
         });
     } else {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'COMMAND_FAILED',
-                message: 'Failed to send stop movement command - not in game or position unknown'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
@@ -243,12 +231,9 @@ router.post('/follow', moveRateLimitMiddleware, (req: Request, res: Response) =>
             }
         });
     } else {
-        res.status(503).json({
-            success: false,
-            error: {
-                code: 'COMMAND_FAILED',
-                message: 'Failed to send follow command - not in game or position unknown'
-            },
+        res.json({
+            success: true,
+            data: null,
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId
