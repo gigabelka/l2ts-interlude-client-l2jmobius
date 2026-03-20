@@ -12,7 +12,10 @@ import type { WebSocket as WebSocketType, WebSocketServer as WebSocketServerType
 import ws = require('ws');
 const WebSocketServer = ws.WebSocketServer;
 const WebSocket = ws.WebSocket;
+import type { IncomingMessage } from 'http';
 import { GameState } from '../game/GameState';
+import { validateToken, extractToken } from './auth';
+import { Logger } from '../logger/Logger';
 
 /**
  * Конфигурация WebSocket сервера
@@ -175,19 +178,35 @@ export class WsApiServer {
     /**
      * Обработчик нового подключения
      * @param ws - WebSocket клиента
+     * @param request - HTTP запрос апгрейда
      */
-    private onConnect(ws: WebSocketType): void {
+    private onConnect(ws: WebSocketType, request: IncomingMessage): void {
         // Проверяем лимит клиентов
         if (this.clients.size >= this.config.maxClients) {
             ws.close(1013, 'Max clients exceeded'); // 1013 = Try Again Later
             return;
         }
 
+        // Проверяем аутентификацию если включена
+        let authenticated = !this.config.authEnabled;
+        if (this.config.authEnabled) {
+            const token = extractToken(request);
+            if (token && validateToken(token, this.config.authTokens)) {
+                authenticated = true;
+            } else {
+                // Логируем неудачную попытку аутентификации
+                const clientIp = request.socket.remoteAddress || 'unknown';
+                Logger.warn('WsAuth', `Authentication failed for client ${clientIp}: invalid or missing token`);
+                ws.close(4001, 'Unauthorized');
+                return;
+            }
+        }
+
         // Создаём состояние клиента с подпиской на все каналы по умолчанию
         const clientState: ClientState = {
             ws,
             channels: new Set(['*']),
-            authenticated: !this.config.authEnabled,
+            authenticated,
         };
         this.clients.set(ws, clientState);
 
@@ -217,6 +236,16 @@ export class WsApiServer {
      * @param raw - raw данные сообщения
      */
     private onMessage(client: ClientState, raw: Buffer): void {
+        // Проверяем аутентификацию
+        if (!client.authenticated) {
+            this.sendToClient(client.ws, {
+                type: 'error',
+                ts: Date.now(),
+                data: { message: 'Unauthorized' },
+            });
+            return;
+        }
+
         try {
             const message = JSON.parse(raw.toString()) as { type: string };
 
@@ -312,7 +341,7 @@ export class WsApiServer {
                         data: { message: `Unknown message type: ${message.type}` },
                     });
             }
-        } catch (error) {
+        } catch {
             this.sendToClient(client.ws, {
                 type: 'error',
                 ts: Date.now(),
@@ -412,6 +441,8 @@ export class WsApiServer {
      * @param event - событие для трансляции
      */
     private broadcast(event: WsEvent): void {
+        // Отправляем только аутентифицированным клиентам
+
         // Throttling для move событий
         if (event.type === 'entity.move') {
             const objectId = (event.data as { objectId?: number })?.objectId;
@@ -467,6 +498,10 @@ export class WsApiServer {
         const channel = this.getChannelForEvent(batch.events[0]?.type ?? 'unknown');
 
         this.clients.forEach((client) => {
+            // Проверяем аутентификацию перед отправкой
+            if (!client.authenticated) {
+                return;
+            }
             if (client.channels.has('*') || client.channels.has(channel)) {
                 // Для батча проверяем подписку на каждое событие
                 this.sendToClient(client.ws, batch);
@@ -489,6 +524,10 @@ export class WsApiServer {
         const channel = this.getChannelForEvent(event.type);
 
         this.clients.forEach((client) => {
+            // Проверяем аутентификацию перед отправкой
+            if (!client.authenticated) {
+                return;
+            }
             if (client.channels.has('*') || client.channels.has(channel)) {
                 this.sendToClient(client.ws, event);
                 this.totalEventsSent++;
