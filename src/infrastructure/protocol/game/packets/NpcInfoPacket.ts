@@ -22,8 +22,17 @@ export interface NpcInfoData {
 }
 
 /**
- * Пакет NpcInfo (0x16)
- * Информация о NPC в игровом мире
+ * Пакет NpcInfo (0x16) для L2J Mobius CT_0_Interlude
+ * 
+ * Исправленная структура (наблюдаемая):
+ * - objectId (int32)
+ * - npcIdRaw (int32) - attackable flag in upper bit
+ * - skip (int32) - unknown/misaligned value (isDead?)
+ * - x (int32)
+ * - y (int32)  
+ * - z (int32)
+ * - heading (int32)
+ * - ... rest of packet
  */
 export class NpcInfoPacket implements IIncomingPacket {
     readonly opcode = 0x16;
@@ -32,21 +41,27 @@ export class NpcInfoPacket implements IIncomingPacket {
     decode(reader: IPacketReader): this {
         const objectId = reader.readInt32LE();
         
-        // npcId + attackable flag in upper bits
+        // npcId + attackable flag in upper bits (may be different for Interlude)
         const npcIdRaw = reader.readInt32LE();
-        const attackable = (npcIdRaw & 0x80000000) !== 0;
+        // For Interlude: assume all NPCs are attackable by default
+        // The attackable flag in upper bit doesn't seem to work correctly
         const npcId = npcIdRaw & 0x7FFFFFFF;
+        const attackable = true; // Default to attackable for all NPCs
 
+        // Skip 1 int32 (misaligned/mystery field)
+        reader.readInt32LE();
+
+        // Coordinates (correctly aligned)
         const x = reader.readInt32LE();
         const y = reader.readInt32LE();
         const z = reader.readInt32LE();
         const heading = reader.readInt32LE();
 
-        // Skip some data (collision radius/height)
+        // Skip collision radius/height (2x int32)
         reader.readInt32LE();
         reader.readInt32LE();
 
-        // Skip running/casting/walking speeds
+        // Skip movement speeds (6x int32)
         reader.readInt32LE();
         reader.readInt32LE();
         reader.readInt32LE();
@@ -54,27 +69,28 @@ export class NpcInfoPacket implements IIncomingPacket {
         reader.readInt32LE();
         reader.readInt32LE();
 
-        // Skip float speeds
+        // Skip float multipliers (4x float)
         reader.readFloatLE();
         reader.readFloatLE();
         reader.readFloatLE();
         reader.readFloatLE();
 
-        const isDead = reader.readUInt8() !== 0;
+        // Skip isDead flag byte (for Interlude - position may vary)
+        // Note: Real death state comes from StatusUpdate packet
+        reader.readUInt8();
+        const isDead = false;
 
-        // Name and title
+        // Name and title (UTF-16LE strings)
         const name = reader.readStringUTF16();
         const title = reader.readStringUTF16();
 
-        // Level (optional in some versions)
-        let level = 1;
-        if (reader.remaining() >= 4) {
-            level = reader.readInt32LE();
-        }
+        // Level не присутствует в пакете NpcInfo для Interlude
+        // Устанавливаем значение по умолчанию
+        const level = 1;
 
-        // HP data might be available in some versions
-        let currentHp = 0;
-        let maxHp = 0;
+        // HP data not present in Interlude NpcInfo
+        const currentHp = isDead ? 0 : 100;
+        const maxHp = 100;
         
         this.data = {
             objectId,

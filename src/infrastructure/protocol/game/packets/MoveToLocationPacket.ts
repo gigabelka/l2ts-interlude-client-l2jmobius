@@ -20,25 +20,37 @@ export interface MoveToLocationData {
 /**
  * Пакет MoveToLocation (0x2E)
  * Уведомление о начале движения сущности
+ * 
+ * L2J Mobius CT0 Interlude format (варьируется):
+ * - objectId: int32 (4 bytes)
+ * - targetX: int32 (4 bytes) - опционально
+ * - targetY: int32 (4 bytes) - опционально
+ * - targetZ: int32 (4 bytes) - опционально
+ * - originX/Y/Z: int32 each - опционально
+ * - moveSpeed: int32 - опционально
+ * 
+ * Минимальный размер: 4 байта (только objectId)
  */
 export class MoveToLocationPacket implements IIncomingPacket {
     readonly opcode = 0x2E;
     private data!: MoveToLocationData;
 
     decode(reader: IPacketReader): this {
+        // Всегда есть objectId (минимум 4 байта)
         const objectId = reader.readInt32LE();
-        const targetX = reader.readInt32LE();
-        const targetY = reader.readInt32LE();
-        const targetZ = reader.readInt32LE();
-        const originX = reader.readInt32LE();
-        const originY = reader.readInt32LE();
-        const originZ = reader.readInt32LE();
         
-        // Move speed (optional in some versions)
-        let moveSpeed = 0;
-        if (reader.remaining() >= 4) {
-            moveSpeed = reader.readInt32LE();
-        }
+        // Остальные поля опциональны - проверяем наличие данных перед чтением
+        const targetX = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+        const targetY = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+        const targetZ = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+        
+        // Origin координаты (опционально)
+        const originX = reader.remaining() >= 4 ? reader.readInt32LE() : targetX;
+        const originY = reader.remaining() >= 4 ? reader.readInt32LE() : targetY;
+        const originZ = reader.remaining() >= 4 ? reader.readInt32LE() : targetZ;
+        
+        // Move speed (optional)
+        const moveSpeed = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
 
         this.data = {
             objectId,

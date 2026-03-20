@@ -81,6 +81,7 @@ router.post('/next', (req: Request, res: Response) => {
     const worldRepo = getWorldRepo();
 
     if (!character || !character.id) {
+        Logger.warn('TargetRoute', 'No character found in repository');
         res.json({
             success: true,
             data: null,
