@@ -125,8 +125,8 @@ class L2ApiClient {
 
     // ==================== Combat ====================
     
-    async attack(objectId = null, shiftClick = false) {
-        const data = { shiftClick };
+    async attack(objectId = null) {
+        const data = {};
         if (objectId) data.objectId = objectId;
         return this.request('POST', '/combat/attack', data);
     }
@@ -139,6 +139,10 @@ class L2ApiClient {
     
     async nextTarget() {
         return this.request('POST', '/target/next');
+    }
+
+    async nextTargetAndAttack() {
+        return this.request('POST', '/target/next-attack');
     }
 
     async getCurrentTarget() {

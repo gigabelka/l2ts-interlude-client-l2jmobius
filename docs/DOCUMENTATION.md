@@ -505,7 +505,51 @@ ws://localhost:3000/ws?token=your_api_key_here
 
 #### `POST /api/v1/target/next`
 
-Переключиться на следующую ближайшую NPC цель.
+Переключиться на следующую ближайшую NPC цель и атаковать её.
+
+**Ответ:**
+```json
+{
+  "success": true,
+  "data": {
+    "objectId": 268475143,
+    "name": "Gremlin",
+    "level": 1,
+    "npcId": 18337,
+    "distance": 5.2,
+    "hp": { "current": 100, "max": 100, "percent": 100 },
+    "isAttackable": true,
+    "isAggressive": false,
+    "actionSent": true,
+    "attackSent": true
+  }
+}
+```
+
+---
+
+#### `POST /api/v1/target/next-attack`
+
+Переключиться на следующую ближайшую NPC цель и сразу атаковать её.
+
+**Ответ:**
+```json
+{
+  "success": true,
+  "data": {
+    "objectId": 268475143,
+    "name": "Gremlin",
+    "level": 1,
+    "npcId": 18337,
+    "distance": 5.2,
+    "hp": { "current": 100, "max": 100, "percent": 100 },
+    "isAttackable": true,
+    "isAggressive": false,
+    "actionSent": true,
+    "attackSent": true
+  }
+}
+```
 
 ---
 
@@ -516,8 +560,7 @@ ws://localhost:3000/ws?token=your_api_key_here
 **Тело запроса:**
 ```json
 {
-  "objectId": 268701234,
-  "shiftClick": false
+  "objectId": 268701234
 }
 ```
 

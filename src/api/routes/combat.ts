@@ -14,10 +14,10 @@ const getCharRepo = () => container.resolve<ICharacterRepository>(DI_TOKENS.Char
 /**
  * POST /api/v1/combat/attack
  * Attack current or specified target.
- * Body: { objectId?: number, shiftClick?: boolean }
+ * Body: { objectId?: number }
  */
 router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) => {
-    const { objectId, shiftClick } = req.body;
+    const { objectId } = req.body;
     const char = getCharRepo().get();
     const targetId = objectId || char?.targetId;
 
@@ -38,16 +38,31 @@ router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) 
         return;
     }
 
+    // Check if GameCommandManager is ready
+    if (!GameCommandManager.isReady()) {
+        res.status(503).json({
+            success: false,
+            error: {
+                code: 'NOT_READY',
+                message: 'Not connected to game server or character not loaded'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
     // Send attack command via GameCommandManager
-    const success = GameCommandManager.attack(targetId, shiftClick || false);
+    const success = GameCommandManager.attack(targetId, false);
     
     if (success) {
         res.json({
             success: true,
             data: {
                 message: 'Attack command sent',
-                targetId,
-                shiftClick: shiftClick || false
+                targetId
             },
             meta: {
                 timestamp: new Date().toISOString(),
@@ -55,9 +70,12 @@ router.post('/attack', combatRateLimitMiddleware, (req: Request, res: Response) 
             }
         });
     } else {
-        res.json({
-            success: true,
-            data: null,
+        res.status(500).json({
+            success: false,
+            error: {
+                code: 'ATTACK_FAILED',
+                message: 'Failed to send attack command'
+            },
             meta: {
                 timestamp: new Date().toISOString(),
                 requestId: req.requestId

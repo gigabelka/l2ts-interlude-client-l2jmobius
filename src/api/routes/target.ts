@@ -74,9 +74,100 @@ router.get('/', (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/target/next
- * Switch to next nearest target (NPC).
+ * Switch to next nearest target (NPC) and attack it.
  */
 router.post('/next', (req: Request, res: Response) => {
+    const character = getCharRepo().get();
+    const worldRepo = getWorldRepo();
+
+    if (!character || !character.id) {
+        Logger.warn('TargetRoute', 'No character found in repository');
+        res.json({
+            success: true,
+            data: null,
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Get nearby NPCs within 1200 range, sorted by distance
+    const nearbyNpcs = worldRepo.getNearbyNpcs(character.position, 1200, { alive: true })
+        .sort((a, b) => (a.distance || 0) - (b.distance || 0));
+
+    if (nearbyNpcs.length === 0) {
+        res.status(400).json({
+            success: false,
+            error: {
+                code: 'NO_TARGETS',
+                message: 'No targets nearby'
+            },
+            meta: {
+                timestamp: new Date().toISOString(),
+                requestId: req.requestId
+            }
+        });
+        return;
+    }
+
+    // Find next target
+    let nextTarget = nearbyNpcs[0]!;
+    const currentTargetId = character.targetId;
+
+    if (currentTargetId) {
+        const currentIndex = nearbyNpcs.findIndex(npc => npc.id === currentTargetId);
+        if (currentIndex >= 0 && currentIndex < nearbyNpcs.length - 1) {
+            // Select next target in list
+            nextTarget = nearbyNpcs[currentIndex + 1]!;
+        } else {
+            // Wrap around to first target or keep current if only one
+            nextTarget = nearbyNpcs[0]!;
+        }
+    }
+
+    // Get NPC name from database for better display
+    const npcData = NpcDatabase.getNpc(nextTarget.npcId);
+    const npcName = npcData?.name || nextTarget.name;
+
+    // Send Action packet to select target on server
+    const actionSuccess = GameCommandManager.action(nextTarget.id, false);
+    
+    // Update local state with database name
+    character.setTarget(nextTarget.id, npcName, 'NPC');
+
+    // Attack the target
+    const attackSuccess = GameCommandManager.attack(nextTarget.id, false);
+
+    Logger.info('TargetRoute', `Next target selected and attacked: ${npcName} (${nextTarget.id}) at ${nextTarget.distance?.toFixed(1)}m`);
+
+    res.json({
+        success: true,
+        data: {
+            objectId: nextTarget.id,
+            name: npcName,
+            level: nextTarget.level,
+            npcId: nextTarget.npcId,
+            distance: nextTarget.distance,
+            hp: nextTarget.hp.toJSON(),
+            isAttackable: nextTarget.isAttackable,
+            isAggressive: nextTarget.isAggressive,
+            actionSent: actionSuccess,
+            attackSent: attackSuccess
+        },
+        meta: {
+            timestamp: new Date().toISOString(),
+            requestId: req.requestId
+        }
+    });
+});
+
+/**
+ * POST /api/v1/target/next-attack
+ * Switch to next nearest target (NPC) and attack it immediately.
+ */
+router.post('/next-attack', (req: Request, res: Response) => {
     const character = getCharRepo().get();
     const worldRepo = getWorldRepo();
 
@@ -137,7 +228,10 @@ router.post('/next', (req: Request, res: Response) => {
     // Update local state with database name
     character.setTarget(nextTarget.id, npcName, 'NPC');
 
-    Logger.info('TargetRoute', `Next target selected: ${npcName} (${nextTarget.id}) at ${nextTarget.distance?.toFixed(1)}m`);
+    // Immediately attack the target
+    const attackSuccess = GameCommandManager.attack(nextTarget.id, false);
+
+    Logger.info('TargetRoute', `Next target selected and attacked: ${npcName} (${nextTarget.id}) at ${nextTarget.distance?.toFixed(1)}m`);
 
     res.json({
         success: true,
@@ -150,7 +244,8 @@ router.post('/next', (req: Request, res: Response) => {
             hp: nextTarget.hp.toJSON(),
             isAttackable: nextTarget.isAttackable,
             isAggressive: nextTarget.isAggressive,
-            actionSent: actionSuccess
+            actionSent: actionSuccess,
+            attackSent: attackSuccess
         },
         meta: {
             timestamp: new Date().toISOString(),
