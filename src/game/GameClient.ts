@@ -31,6 +31,7 @@ import { OutgoingGamePacket } from './packets/outgoing/OutgoingGamePacket';
 // Services
 import type { GameCommandManagerClass } from './GameCommandManager';
 import type { IGameClient } from './IGameClient';
+import type { GameState } from './GameState';
 
 /**
  * Dependencies for GameClient
@@ -45,6 +46,7 @@ export interface GameClientDependencies {
     connectionRepo: IConnectionRepository;
     commandManager: GameCommandManagerClass;
     packetSerializer?: PacketSerializer; // Опционально: сериализатор с pooling
+    gameState?: GameState; // Опционально: для сброса состояния при отключении
 }
 
 /**
@@ -125,6 +127,12 @@ export class GameClientNew implements IGameClient {
         this.deps.characterRepo.reset();
         this.deps.worldRepo.reset();
         this.deps.inventoryRepo.clear();
+
+        // Reset GameState if available (sends 'disconnected' event to WS clients)
+        if (this.deps.gameState) {
+            this.deps.gameState.reset();
+            this.deps.gameState.update('disconnected', { reason: 'Connection closed' });
+        }
 
         this.publishConnectionState(ConnectionPhase.DISCONNECTED);
         this.publishDisconnectedEvent();

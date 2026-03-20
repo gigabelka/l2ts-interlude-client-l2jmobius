@@ -21,6 +21,7 @@ import { initGameCommandManager } from './game/GameCommandManager';
 import Connection from './network/Connection';
 import { GameState } from './game/GameState';
 import { WsApiServer } from './ws/WsServer';
+import type { GameState as GameStateType } from './game/GameState';
 
 
 // API
@@ -108,7 +109,7 @@ function initWsApiServer(): void {
 
     try {
         const container = getContainer();
-        const gameState = container.resolve<GameState>(DI_TOKENS.GameState).getOrThrow();
+        const gameState = container.resolve<GameStateType>(DI_TOKENS.GameState).getOrThrow();
 
         wsApiServer = new WsApiServer(gameState, {
             port: WS_CONFIG.port,
@@ -143,6 +144,7 @@ function onLoginComplete(session: SessionData): void {
     const worldRepo = container.resolve<IWorldRepository>(DI_TOKENS.WorldRepository).getOrThrow();
     const invRepo = container.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow();
     const connectionRepo = container.resolve<IConnectionRepository>(DI_TOKENS.ConnectionRepository).getOrThrow();
+    const gameState = container.resolve<GameState>(DI_TOKENS.GameState).getOrThrow();
 
     // Инициализируем GameCommandManager с зависимостями (DI вместо Service Locator)
     const commandManager = initGameCommandManager({
@@ -166,6 +168,7 @@ function onLoginComplete(session: SessionData): void {
         connectionRepo,
         commandManager,
         packetSerializer,
+        gameState,
     }, connection);
 
     // Подписываемся на событие входа в игру для запуска WebSocket API
