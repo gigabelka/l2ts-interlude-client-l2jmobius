@@ -4,7 +4,11 @@
  * @module api/ws
  */
 
-import { WebSocketServer, WebSocket } from 'ws';
+/// <reference types="ws" />
+import type { WebSocket as WebSocketType, WebSocketServer as WebSocketServerType } from 'ws';
+import ws = require('ws');
+const WebSocketServer = ws.WebSocketServer;
+const WebSocket = ws.WebSocket;
 import { parse } from 'url';
 import type { IncomingMessage, Server } from 'http';
 import { API_CONFIG } from '../../config';
@@ -23,7 +27,7 @@ export interface WsServerOptions {
 }
 
 interface WsClient {
-    ws: WebSocket;
+    ws: WebSocketType;
     id: string;
     channels: Set<string>;
     isAlive: boolean;
@@ -49,8 +53,8 @@ type WsMessage = SubscribeMessage | UnsubscribeMessage | PingMessage;
  * WebSocket сервер с новой архитектурой
  */
 export class WsServerNew {
-    private wss: WebSocketServer | null = null;
-    private clients: Map<WebSocket, WsClient> = new Map();
+    private wss: WebSocketServerType | null = null;
+    private clients: Map<WebSocketType, WsClient> = new Map();
     private pingInterval: NodeJS.Timeout | null = null;
     private options: WsServerOptions = {};
     private unsubscribeEventBus: (() => void) | null = null;
@@ -143,7 +147,7 @@ export class WsServerNew {
         return true;
     }
 
-    private handleConnection(ws: WebSocket, req: IncomingMessage): void {
+    private handleConnection(ws: WebSocketType, req: IncomingMessage): void {
         const clientId = `${req.socket.remoteAddress}:${req.socket.remotePort}`;
         const client: WsClient = {
             ws,
