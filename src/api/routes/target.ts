@@ -74,7 +74,7 @@ router.get('/', (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/target/next
- * Switch to next nearest target (NPC) and attack it.
+ * Switch to next nearest target (NPC). Only selects target, does not attack.
  */
 router.post('/next', (req: Request, res: Response) => {
     const character = getCharRepo().get();
@@ -131,16 +131,15 @@ router.post('/next', (req: Request, res: Response) => {
     const npcData = NpcDatabase.getNpc(nextTarget.npcId);
     const npcName = npcData?.name || nextTarget.name;
 
-    // Send Action packet to select target on server
-    const actionSuccess = GameCommandManager.action(nextTarget.id, false);
-    
-    // Update local state with database name
-    character.setTarget(nextTarget.id, npcName, 'NPC');
+    // Update local state only - do NOT send Action packet to server
+    // because Action packet triggers auto-attack behavior on L2J Mobius
+    // Use update() to persist changes since get() returns a clone
+    getCharRepo().update((char) => {
+        char.setTarget(nextTarget.id, npcName, 'NPC');
+        return char;
+    });
 
-    // Attack the target
-    const attackSuccess = GameCommandManager.attack(nextTarget.id, false);
-
-    Logger.info('TargetRoute', `Next target selected and attacked: ${npcName} (${nextTarget.id}) at ${nextTarget.distance?.toFixed(1)}m`);
+    Logger.info('TargetRoute', `Next target selected (local only): ${npcName} (${nextTarget.id}) at ${nextTarget.distance?.toFixed(1)}m`);
 
     res.json({
         success: true,
@@ -152,9 +151,7 @@ router.post('/next', (req: Request, res: Response) => {
             distance: nextTarget.distance,
             hp: nextTarget.hp.toJSON(),
             isAttackable: nextTarget.isAttackable,
-            isAggressive: nextTarget.isAggressive,
-            actionSent: actionSuccess,
-            attackSent: attackSuccess
+            isAggressive: nextTarget.isAggressive
         },
         meta: {
             timestamp: new Date().toISOString(),

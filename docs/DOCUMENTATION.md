@@ -505,7 +505,7 @@ ws://localhost:3000/ws?token=your_api_key_here
 
 #### `POST /api/v1/target/next`
 
-Переключиться на следующую ближайшую NPC цель и атаковать её.
+Переключиться на следующую ближайшую NPC цель. Только выбирает цель, не атакует.
 
 **Ответ:**
 ```json
@@ -519,9 +519,7 @@ ws://localhost:3000/ws?token=your_api_key_here
     "distance": 5.2,
     "hp": { "current": 100, "max": 100, "percent": 100 },
     "isAttackable": true,
-    "isAggressive": false,
-    "actionSent": true,
-    "attackSent": true
+    "isAggressive": false
   }
 }
 ```
