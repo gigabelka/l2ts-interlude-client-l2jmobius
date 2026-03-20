@@ -79,6 +79,14 @@ export class Npc {
         return !this.isDead;
     }
 
+    get currentHp(): number {
+        return this.data.hp.current;
+    }
+
+    get maxHp(): number {
+        return this.data.hp.max;
+    }
+
     // ============================================================================
     // Domain Operations
     // ============================================================================
@@ -122,6 +130,33 @@ export class Npc {
     markAsDespawned(reason: 'despawned' | 'unknown' = 'despawned'): void {
         this.uncommittedEvents.push(
             new NpcDespawnedEvent({ objectId: this.id, reason })
+        );
+    }
+
+    /**
+     * Умереть (алиас для markAsDead)
+     */
+    die(): void {
+        this.markAsDead();
+    }
+
+    /**
+     * Воскресить (для респавна NPC)
+     */
+    revive(): void {
+        // HP будет восстановлено при спавне
+        this.uncommittedEvents.push(
+            new NpcSpawnedEvent({
+                objectId: this.id,
+                npcId: this.npcId,
+                name: this.name,
+                level: this.level,
+                position: this.position,
+                isAttackable: this.isAttackable,
+                isAggressive: this.isAggressive,
+                maxHp: this.maxHp,
+                currentHp: this.maxHp, // Полное восстановление HP
+            })
         );
     }
 

@@ -178,7 +178,9 @@ export class UserInfoHandler extends BasePacketHandlerStrategy<UserInfoPacket> {
             }),
             combatStats: CombatStats.create({}),
             skills: [],
+            activeEffects: [],
             isInCombat: false,
+            isDead: data.currentHp <= 0,
         };
 
         const character = Character.create(characterData);

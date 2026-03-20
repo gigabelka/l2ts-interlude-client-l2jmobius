@@ -9,3 +9,13 @@ export { MoveToLocationPacket, type MoveToLocationData } from './MoveToLocationP
 export { SpawnItemPacket, type SpawnItemData } from './SpawnItemPacket';
 export { DropItemPacket, type DropItemData } from './DropItemPacket';
 export { StatusUpdatePacket, type StatusUpdateData, type AttributeUpdate, StatusAttribute } from './StatusUpdatePacket';
+
+// Новые пакеты
+export { DeleteObjectPacket, type DeleteObjectData } from './DeleteObjectPacket';
+export { CreatureSayPacket, type CreatureSayData, type ChatMessageType } from './CreatureSayPacket';
+export { DiePacket, type DieData } from './DiePacket';
+export { RevivePacket, type ReviveData } from './RevivePacket';
+export { AbnormalStatusUpdatePacket, type AbnormalStatusUpdateData, type AbnormalEffect } from './AbnormalStatusUpdatePacket';
+export { MagicSkillUsePacket, type MagicSkillUseData } from './MagicSkillUsePacket';
+export { MyTargetSelectedPacket, type MyTargetSelectedData } from './MyTargetSelectedPacket';
+export { TargetUnselectedPacket, type TargetUnselectedData } from './TargetUnselectedPacket';

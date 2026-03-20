@@ -75,6 +75,18 @@ export class CharacterStatsChangedEvent extends BaseDomainEvent<CharacterStatsCh
             cp: { current, max, delta: current - previous }
         }, objectId);
     }
+
+    static createDied(objectId: ObjectId): CharacterStatsChangedEvent {
+        return new CharacterStatsChangedEvent({
+            hp: { current: 0, max: 0, delta: 0 }
+        }, objectId);
+    }
+
+    static createRevived(objectId: ObjectId): CharacterStatsChangedEvent {
+        return new CharacterStatsChangedEvent({
+            hp: { current: 1, max: 1, delta: 0 } // Будет обновлено через StatusUpdate
+        }, objectId);
+    }
 }
 
 // =============================================================================
@@ -124,6 +136,7 @@ export interface CharacterTargetChangedPayload {
     newTargetId?: number;
     targetName?: string;
     targetType?: 'NPC' | 'PLAYER';
+    targetHp?: { current: number; max: number };
 }
 
 export class CharacterTargetChangedEvent extends BaseDomainEvent<CharacterTargetChangedPayload> {
@@ -147,9 +160,15 @@ export interface SkillInfo {
 
 export interface CharacterSkillsUpdatedPayload {
     skills: SkillInfo[];
-    totalCount: number;
-    activeCount: number;
-    passiveCount: number;
+    totalCount?: number;
+    activeCount?: number;
+    passiveCount?: number;
+    activeEffects?: ActiveEffectInfo[];
+}
+
+export interface ActiveEffectInfo {
+    skillId: number;
+    remainingTime: number;
 }
 
 export class CharacterSkillsUpdatedEvent extends BaseDomainEvent<CharacterSkillsUpdatedPayload> {

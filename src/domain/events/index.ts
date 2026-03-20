@@ -21,6 +21,7 @@ export type {
     CharacterTargetChangedPayload,
     CharacterSkillsUpdatedPayload,
     SkillInfo,
+    ActiveEffectInfo,
     InventoryItemData,
     InventoryItemAddedPayload,
     InventoryItemRemovedPayload,

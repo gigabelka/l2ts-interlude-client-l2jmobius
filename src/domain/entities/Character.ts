@@ -13,6 +13,11 @@ import {
 } from '../events';
 import type { DomainEvent } from '../events';
 
+export interface ActiveEffect {
+    skillId: number;
+    duration: number;
+}
+
 export interface CharacterData {
     objectId: number;
     name: string;
@@ -30,8 +35,10 @@ export interface CharacterData {
     baseStats: BaseStats;
     combatStats: CombatStats;
     skills: SkillInfo[];
+    activeEffects: ActiveEffect[];
     targetId?: number;
     isInCombat: boolean;
+    isDead: boolean;
 }
 
 import type { PositionData } from '../value-objects/Position';
@@ -55,8 +62,10 @@ export interface CharacterJSON {
     baseStats: CharacterStatsData;
     combatStats: CombatStatsData;
     skills: SkillInfo[];
+    activeEffects: ActiveEffect[];
     targetId?: number;
     isInCombat: boolean;
+    isDead: boolean;
 }
 
 /**
@@ -142,6 +151,14 @@ export class Character {
 
     get isInCombat(): boolean {
         return this.data.isInCombat;
+    }
+
+    get isDead(): boolean {
+        return this.data.isDead;
+    }
+
+    get activeEffects(): readonly ActiveEffect[] {
+        return Object.freeze([...this.data.activeEffects]);
     }
 
     // ============================================================================
@@ -273,6 +290,36 @@ export class Character {
     }
 
     /**
+     * Обновить активные эффекты (баффы/дебаффы)
+     */
+    updateEffects(effects: ActiveEffect[]): void {
+        this.data.activeEffects = [...effects];
+        this.invalidateSnapshot();
+    }
+
+    /**
+     * Установить состояние смерти
+     */
+    die(): void {
+        if (!this.data.isDead) {
+            this.data.isDead = true;
+            this.data.hp = Vitals.zero();
+            this.invalidateSnapshot();
+        }
+    }
+
+    /**
+     * Воскресить персонажа
+     */
+    revive(): void {
+        if (this.data.isDead) {
+            this.data.isDead = false;
+            // HP будет обновлено через StatusUpdate
+            this.invalidateSnapshot();
+        }
+    }
+
+    /**
      * Установить состояние боя
      */
     setInCombat(inCombat: boolean): void {
@@ -370,7 +417,9 @@ export class Character {
             baseStats,
             combatStats,
             skills: data.skills ?? [],
+            activeEffects: data.activeEffects ?? [],
             isInCombat: data.isInCombat ?? false,
+            isDead: data.isDead ?? false,
             targetId: data.targetId,
         };
         return new Character(ObjectId.of(objectId), fullData);
@@ -394,8 +443,10 @@ export class Character {
             baseStats: this.data.baseStats.toJSON(),
             combatStats: this.data.combatStats.toJSON(),
             skills: this.data.skills,
+            activeEffects: this.data.activeEffects,
             targetId: this.data.targetId,
             isInCombat: this.data.isInCombat,
+            isDead: this.data.isDead,
         };
     }
 
@@ -442,7 +493,9 @@ export class Character {
             baseStats,
             combatStats,
             skills: data.skills,
+            activeEffects: data.activeEffects ?? [],
             isInCombat: data.isInCombat,
+            isDead: data.isDead ?? false,
             targetId: data.targetId,
         };
         return new Character(ObjectId.of(data.objectId), fullData);

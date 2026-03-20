@@ -21,6 +21,16 @@ import { SpawnItemPacket } from './packets/SpawnItemPacket';
 import { DropItemPacket } from './packets/DropItemPacket';
 import { StatusUpdatePacket } from './packets/StatusUpdatePacket';
 
+// Новые пакеты
+import { DeleteObjectPacket } from './packets/DeleteObjectPacket';
+import { CreatureSayPacket } from './packets/CreatureSayPacket';
+import { DiePacket } from './packets/DiePacket';
+import { RevivePacket } from './packets/RevivePacket';
+import { AbnormalStatusUpdatePacket } from './packets/AbnormalStatusUpdatePacket';
+import { MagicSkillUsePacket } from './packets/MagicSkillUsePacket';
+import { MyTargetSelectedPacket } from './packets/MyTargetSelectedPacket';
+import { TargetUnselectedPacket } from './packets/TargetUnselectedPacket';
+
 // Handlers
 import { UserInfoHandler } from './handlers/UserInfoHandler';
 import { NpcInfoHandler } from './handlers/NpcInfoHandler';
@@ -33,6 +43,16 @@ import { MoveToLocationHandler } from './handlers/MoveToLocationHandler';
 import { SpawnItemHandler } from './handlers/SpawnItemHandler';
 import { DropItemHandler } from './handlers/DropItemHandler';
 import { StatusUpdateHandler } from './handlers/StatusUpdateHandler';
+
+// Новые обработчики
+import { DeleteObjectHandler } from './handlers/DeleteObjectHandler';
+import { CreatureSayHandler } from './handlers/CreatureSayHandler';
+import { DieHandler } from './handlers/DieHandler';
+import { ReviveHandler } from './handlers/ReviveHandler';
+import { AbnormalStatusUpdateHandler } from './handlers/AbnormalStatusUpdateHandler';
+import { MagicSkillUseHandler } from './handlers/MagicSkillUseHandler';
+import { MyTargetSelectedHandler } from './handlers/MyTargetSelectedHandler';
+import { TargetUnselectedHandler } from './handlers/TargetUnselectedHandler';
 
 /**
  * Конфигурация пакета
@@ -130,6 +150,63 @@ const PACKET_REGISTRY: PacketConfig[] = [
         handlerClass: StatusUpdateHandler,
         repositories: ['character', 'world'],
         description: 'StatusUpdate - обновление HP/MP/CP',
+    },
+    // Новые пакеты
+    {
+        opcode: 0x08,
+        packetClass: DeleteObjectPacket,
+        handlerClass: DeleteObjectHandler,
+        repositories: ['character', 'world'],
+        description: 'DeleteObject - удаление объекта из мира',
+    },
+    {
+        opcode: 0x4A,
+        packetClass: CreatureSayPacket,
+        handlerClass: CreatureSayHandler,
+        repositories: ['character'],
+        description: 'CreatureSay - сообщение в чате',
+    },
+    {
+        opcode: 0x06,
+        packetClass: DiePacket,
+        handlerClass: DieHandler,
+        repositories: ['character', 'world'],
+        description: 'Die - смерть сущности',
+    },
+    {
+        opcode: 0x07,
+        packetClass: RevivePacket,
+        handlerClass: ReviveHandler,
+        repositories: ['character', 'world'],
+        description: 'Revive - воскрешение сущности',
+    },
+    {
+        opcode: 0x39,
+        packetClass: AbnormalStatusUpdatePacket,
+        handlerClass: AbnormalStatusUpdateHandler,
+        repositories: ['character'],
+        description: 'AbnormalStatusUpdate - обновление баффов/дебаффов',
+    },
+    {
+        opcode: 0x76,
+        packetClass: MagicSkillUsePacket,
+        handlerClass: MagicSkillUseHandler,
+        repositories: ['character', 'world'],
+        description: 'MagicSkillUse - использование скилла',
+    },
+    {
+        opcode: 0xA1,
+        packetClass: MyTargetSelectedPacket,
+        handlerClass: MyTargetSelectedHandler,
+        repositories: ['character', 'world'],
+        description: 'MyTargetSelected - выбор цели',
+    },
+    {
+        opcode: 0xA6,
+        packetClass: TargetUnselectedPacket,
+        handlerClass: TargetUnselectedHandler,
+        repositories: ['character'],
+        description: 'TargetUnselected - сброс цели',
     },
 ];
 
