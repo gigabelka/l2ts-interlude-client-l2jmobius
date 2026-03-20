@@ -5,17 +5,20 @@
  * WebSocket сервер для трансляции игрового состояния в реальном времени.
  * Поддерживает подписку на каналы, авторизацию и отправку снапшотов состояния.
  * Оптимизации: throttling для move событий, батчинг событий.
+ * 
+ * HTTP эндпоинты для снимков работают на том же порту (shared HTTP server).
  */
 
-/// <reference types="ws" />
 import type { WebSocket as WebSocketType, WebSocketServer as WebSocketServerType } from 'ws';
 import ws = require('ws');
 const WebSocketServer = ws.WebSocketServer;
 const WebSocket = ws.WebSocket;
 import type { IncomingMessage } from 'http';
+import * as http from 'http';
 import { GameState } from '../game/GameState';
 import { validateToken, extractToken } from './auth';
 import { Logger } from '../logger/Logger';
+import { HttpEndpoints } from './HttpEndpoints';
 
 /**
  * Конфигурация WebSocket сервера
@@ -59,7 +62,7 @@ interface ClientState {
 /**
  * Статистика сервера
  */
-interface ServerStats {
+export interface ServerStats {
     clientsOnline: number;
     uptime: number;
     eventsPerSecond: number;
@@ -95,14 +98,17 @@ interface BatchEvent {
 
 /**
  * WebSocket API сервер для трансляции GameState
+ * HTTP эндпоинты доступны на том же порту
  */
 export class WsApiServer {
     private wss: WebSocketServerType | null = null;
+    private httpServer: http.Server | null = null;
     private clients: Map<WebSocketType, ClientState> = new Map();
     private config: WsConfig;
     private state: GameState;
     private startTime: number = Date.now();
     private boundBroadcast: (event: WsEvent) => void;
+    private httpEndpoints: HttpEndpoints;
 
     // Throttling для move событий
     private lastMoveTime: Map<number, number> = new Map(); // objectId -> timestamp
@@ -118,7 +124,7 @@ export class WsApiServer {
     private readonly METRICS_WINDOW_MS = 10000; // 10 секунд окно
 
     /**
-     * Создаёт WebSocket сервер
+     * Создаёт WebSocket сервер с HTTP эндпоинтами
      * @param state - GameState для трансляции
      * @param config - конфигурация сервера
      */
@@ -127,24 +133,47 @@ export class WsApiServer {
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.boundBroadcast = this.broadcast.bind(this);
 
-        // Создаём WebSocket сервер
-        this.wss = new WebSocketServer({ port: this.config.port });
+        // Создаём HTTP сервер
+        this.httpServer = http.createServer();
+
+        // Создаём WebSocket сервер поверх HTTP сервера
+        this.wss = new WebSocketServer({
+            server: this.httpServer,
+        });
+
+        // Создаём HTTP эндпоинты
+        this.httpEndpoints = new HttpEndpoints(state, {
+            authEnabled: this.config.authEnabled,
+            authTokens: this.config.authTokens,
+        });
+
+        // Привязываем HTTP эндпоинты к серверу
+        this.httpEndpoints.attach(this.httpServer);
+
+        // Устанавливаем getter для количества клиентов
+        this.httpEndpoints.setWsClientCountGetter(() => this.clients.size);
 
         // Подписываемся на события от GameState
         this.state.on('ws:event', this.boundBroadcast);
 
-        // Настраиваем обработку подключений
+        // Настраиваем обработку подключений WebSocket
         this.wss.on('connection', this.onConnect.bind(this));
+
+        // Запускаем HTTP сервер
+        this.httpServer.listen(this.config.port, () => {
+            Logger.info('WsApiServer', `Server started on port ${this.config.port}`);
+            Logger.info('WsApiServer', `WebSocket: ws://localhost:${this.config.port}`);
+            Logger.info('WsApiServer', `HTTP endpoints: http://localhost:${this.config.port}/api/v1/{snapshot|me|players|npcs|inventory|chat|stats|health}`);
+        });
 
         // Запускаем таймер метрик
         this.startMetricsTimer();
 
-        // Логируем запуск
-        console.log(`[WsApiServer] Started on port ${this.config.port}`);
+        // Логируем конфигурацию
         if (this.config.batchInterval > 0) {
-            console.log(`[WsApiServer] Batching enabled: ${this.config.batchInterval}ms`);
+            Logger.info('WsApiServer', `Batching enabled: ${this.config.batchInterval}ms`);
         }
-        console.log(`[WsApiServer] Move throttle: ${this.config.moveThrottleMs}ms`);
+        Logger.info('WsApiServer', `Move throttle: ${this.config.moveThrottleMs}ms`);
     }
 
     /**
@@ -638,9 +667,15 @@ export class WsApiServer {
         // Очищаем throttle map
         this.lastMoveTime.clear();
 
-        // Закрываем сервер
+        // Закрываем WebSocket сервер
         this.wss?.close();
-        console.log('[WsApiServer] Stopped');
+
+        // Закрываем HTTP сервер
+        this.httpServer?.close(() => {
+            Logger.info('WsApiServer', 'HTTP server stopped');
+        });
+
+        Logger.info('WsApiServer', 'Stopped');
     }
 }
 
