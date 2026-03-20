@@ -221,6 +221,8 @@ const WsConfigSchema = z.object({
     authEnabled: z.boolean(),
     authTokens: z.array(z.string()),
     maxClients: z.number().int().min(1).max(100),
+    batchInterval: z.number().int().min(0).max(1000),
+    moveThrottleMs: z.number().int().min(0).max(1000),
 });
 
 export type WsConfig = z.infer<typeof WsConfigSchema>;
@@ -232,6 +234,8 @@ function validateWsConfig(): WsConfig {
         authEnabled: process.env['WS_AUTH_ENABLED'] === 'true',
         authTokens: process.env['WS_AUTH_TOKENS']?.split(',').filter(Boolean) || [],
         maxClients: parseInt(process.env['WS_MAX_CLIENTS'] || '10', 10),
+        batchInterval: parseInt(process.env['WS_BATCH_INTERVAL'] || '50', 10),
+        moveThrottleMs: parseInt(process.env['WS_MOVE_THROTTLE_MS'] || '100', 10),
     };
 
     const result = WsConfigSchema.safeParse(rawConfig);

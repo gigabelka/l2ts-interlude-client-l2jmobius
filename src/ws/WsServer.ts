@@ -4,6 +4,7 @@
  *
  * WebSocket сервер для трансляции игрового состояния в реальном времени.
  * Поддерживает подписку на каналы, авторизацию и отправку снапшотов состояния.
+ * Оптимизации: throttling для move событий, батчинг событий.
  */
 
 /// <reference types="ws" />
@@ -25,6 +26,10 @@ export interface WsConfig {
     authTokens: string[];
     /** Максимальное количество клиентов */
     maxClients: number;
+    /** Интервал батчинга событий в мс (0 = отключено, по умолчанию 50) */
+    batchInterval: number;
+    /** Throttling для move событий в мс (по умолчанию 100) */
+    moveThrottleMs: number;
 }
 
 /**
@@ -35,6 +40,8 @@ const DEFAULT_CONFIG: WsConfig = {
     authEnabled: false,
     authTokens: [],
     maxClients: 10,
+    batchInterval: 50,
+    moveThrottleMs: 100,
 };
 
 /**
@@ -52,6 +59,9 @@ interface ClientState {
 interface ServerStats {
     clientsOnline: number;
     uptime: number;
+    eventsPerSecond: number;
+    droppedMoveEvents: number;
+    totalEventsSent: number;
 }
 
 /**
@@ -72,6 +82,15 @@ interface WsEvent<T = unknown> {
 }
 
 /**
+ * Батч событий
+ */
+interface BatchEvent {
+    type: 'batch';
+    ts: number;
+    events: WsEvent[];
+}
+
+/**
  * WebSocket API сервер для трансляции GameState
  */
 export class WsApiServer {
@@ -81,6 +100,19 @@ export class WsApiServer {
     private state: GameState;
     private startTime: number = Date.now();
     private boundBroadcast: (event: WsEvent) => void;
+
+    // Throttling для move событий
+    private lastMoveTime: Map<number, number> = new Map(); // objectId -> timestamp
+
+    // Батчинг событий
+    private eventBuffer: WsEvent[] = [];
+    private batchTimer: NodeJS.Timeout | null = null;
+
+    // Метрики
+    private eventCountWindow: number[] = []; // Метрики за последние 10 секунд
+    private droppedMoveEvents: number = 0;
+    private totalEventsSent: number = 0;
+    private readonly METRICS_WINDOW_MS = 10000; // 10 секунд окно
 
     /**
      * Создаёт WebSocket сервер
@@ -101,8 +133,43 @@ export class WsApiServer {
         // Настраиваем обработку подключений
         this.wss.on('connection', this.onConnect.bind(this));
 
+        // Запускаем таймер метрик
+        this.startMetricsTimer();
+
         // Логируем запуск
         console.log(`[WsApiServer] Started on port ${this.config.port}`);
+        if (this.config.batchInterval > 0) {
+            console.log(`[WsApiServer] Batching enabled: ${this.config.batchInterval}ms`);
+        }
+        console.log(`[WsApiServer] Move throttle: ${this.config.moveThrottleMs}ms`);
+    }
+
+    /**
+     * Запускает таймер для обновления метрик
+     */
+    private startMetricsTimer(): void {
+        setInterval(() => {
+            // Очищаем старые метрики (старше 10 секунд)
+            const cutoff = Date.now() - this.METRICS_WINDOW_MS;
+            this.eventCountWindow = this.eventCountWindow.filter(ts => ts > cutoff);
+        }, 1000);
+    }
+
+    /**
+     * Проверяет, нужно ли throttle событие move
+     * @param objectId - ID объекта
+     * @returns true если событие нужно пропустить
+     */
+    private shouldThrottleMove(objectId: number): boolean {
+        const now = Date.now();
+        const lastTime = this.lastMoveTime.get(objectId);
+
+        if (lastTime !== undefined && now - lastTime < this.config.moveThrottleMs) {
+            return true;
+        }
+
+        this.lastMoveTime.set(objectId, now);
+        return false;
     }
 
     /**
@@ -222,6 +289,14 @@ export class WsApiServer {
                     });
                     break;
 
+                case 'get.stats':
+                    this.sendToClient(client.ws, {
+                        type: 'stats',
+                        ts: Date.now(),
+                        data: this.getStats(),
+                    });
+                    break;
+
                 case 'ping':
                     this.sendToClient(client.ws, {
                         type: 'pong',
@@ -326,7 +401,7 @@ export class WsApiServer {
      * @param ws - WebSocket клиента
      * @param event - событие для отправки
      */
-    private sendToClient(ws: WebSocketType, event: WsEvent): void {
+    private sendToClient(ws: WebSocketType, event: WsEvent | BatchEvent): void {
         if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(event));
         }
@@ -337,11 +412,87 @@ export class WsApiServer {
      * @param event - событие для трансляции
      */
     private broadcast(event: WsEvent): void {
+        // Throttling для move событий
+        if (event.type === 'entity.move') {
+            const objectId = (event.data as { objectId?: number })?.objectId;
+            if (objectId !== undefined) {
+                if (this.shouldThrottleMove(objectId)) {
+                    this.droppedMoveEvents++;
+                    return;
+                }
+            }
+        }
+
+        // Батчинг событий
+        if (this.config.batchInterval > 0) {
+            this.eventBuffer.push(event);
+            this.scheduleBatchSend();
+        } else {
+            // Отправляем сразу
+            this.sendEventToSubscribers(event);
+        }
+    }
+
+    /**
+     * Планирует отправку батча событий
+     */
+    private scheduleBatchSend(): void {
+        if (this.batchTimer !== null) {
+            return; // Таймер уже запущен
+        }
+
+        this.batchTimer = setTimeout(() => {
+            this.flushBatch();
+        }, this.config.batchInterval);
+    }
+
+    /**
+     * Отправляет накопленные события батчем
+     */
+    private flushBatch(): void {
+        if (this.eventBuffer.length === 0) {
+            this.batchTimer = null;
+            return;
+        }
+
+        const batch: BatchEvent = {
+            type: 'batch',
+            ts: Date.now(),
+            events: this.eventBuffer.splice(0), // Очищаем буфер
+        };
+
+        this.batchTimer = null;
+
+        // Отправляем батч всем подписанным клиентам
+        const channel = this.getChannelForEvent(batch.events[0]?.type ?? 'unknown');
+
+        this.clients.forEach((client) => {
+            if (client.channels.has('*') || client.channels.has(channel)) {
+                // Для батча проверяем подписку на каждое событие
+                this.sendToClient(client.ws, batch);
+                this.totalEventsSent += batch.events.length;
+            }
+        });
+
+        // Обновляем метрики
+        const now = Date.now();
+        for (let i = 0; i < batch.events.length; i++) {
+            this.eventCountWindow.push(now);
+        }
+    }
+
+    /**
+     * Отправляет событие подписанным клиентам
+     * @param event - событие для отправки
+     */
+    private sendEventToSubscribers(event: WsEvent): void {
         const channel = this.getChannelForEvent(event.type);
 
         this.clients.forEach((client) => {
             if (client.channels.has('*') || client.channels.has(channel)) {
                 this.sendToClient(client.ws, event);
+                this.totalEventsSent++;
+                this.eventCountWindow.push(Date.now());
             }
         });
     }
@@ -405,9 +556,19 @@ export class WsApiServer {
      * @returns объект с количеством клиентов и временем работы
      */
     getStats(): ServerStats {
+        // Очищаем старые метрики
+        const cutoff = Date.now() - this.METRICS_WINDOW_MS;
+        this.eventCountWindow = this.eventCountWindow.filter(ts => ts > cutoff);
+
+        // Вычисляем eventsPerSecond (скользящее среднее за 10 секунд)
+        const eventsPerSecond = this.eventCountWindow.length / (this.METRICS_WINDOW_MS / 1000);
+
         return {
             clientsOnline: this.clients.size,
             uptime: Date.now() - this.startTime,
+            eventsPerSecond: Math.round(eventsPerSecond * 100) / 100,
+            droppedMoveEvents: this.droppedMoveEvents,
+            totalEventsSent: this.totalEventsSent,
         };
     }
 
@@ -415,6 +576,11 @@ export class WsApiServer {
      * Останавливает сервер
      */
     stop(): void {
+        // Отправляем оставшиеся события в батче
+        if (this.config.batchInterval > 0 && this.eventBuffer.length > 0) {
+            this.flushBatch();
+        }
+
         // Отписываемся от событий GameState
         this.state.off('ws:event', this.boundBroadcast);
 
@@ -423,6 +589,15 @@ export class WsApiServer {
             client.ws.close();
         });
         this.clients.clear();
+
+        // Очищаем таймер батчинга
+        if (this.batchTimer !== null) {
+            clearTimeout(this.batchTimer);
+            this.batchTimer = null;
+        }
+
+        // Очищаем throttle map
+        this.lastMoveTime.clear();
 
         // Закрываем сервер
         this.wss?.close();
