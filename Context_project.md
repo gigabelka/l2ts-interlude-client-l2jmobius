@@ -1,6 +1,6 @@
 # Сводка по репозиторию L2 Headless Client
 
-> Дата: 2026-03-20 (обновлено: HTTP эндпоинты для снимков GameState — shared порт с WebSocket)
+> Дата: 2026-03-20 (обновлено: Тесты для GameState, GameStateUpdater, WsServer в src/__tests__/)
 > Репозиторий: `c:\MyProg\l2J-Mobius-CT-0-Interlude\`
 > Назначение: Headless Lineage 2 клиент на TypeScript для сервера L2J_Mobius CT_0_Interlude
 
@@ -453,6 +453,39 @@ curl http://localhost:3001/api/v1/health
   "cors": "^2.8.6"            // CORS middleware
 }
 ```
+
+---
+
+## 🧪 Тесты
+
+### Структура тестов (2026-03-20)
+
+Тесты используют **Vitest** (v2.1.4) и находятся в:
+- `tests/` - существующие тесты для архитектуры и интеграции
+- `src/__tests__/` - новые тесты для GameState, GameStateUpdater, WsServer
+
+### Новые тесты в `src/__tests__/`:
+
+| Файл | Описание | Тесты |
+|------|----------|-------|
+| `GameState.test.ts` | Тесты для GameState | ✅ Создание пустого состояния<br>✅ getSnapshot() с пустыми коллекциями<br>✅ update() эмитит "ws:event"<br>✅ calcDistance() считает расстояние<br>✅ reset() очищает всё<br>✅ chat обрезается до 50 в снапшоте |
+| `GameStateUpdater.test.ts` | Тесты для обработки пакетов | ✅ 0x04 UserInfo → обновляет state.me<br>✅ 0x03 CharInfo → добавляет в state.players<br>✅ 0x16 NpcInfo → добавляет в state.npcs<br>✅ 0x08 DeleteObject → удаляет из коллекций<br>✅ 0x2E MoveToLocation → обновляет координаты<br>✅ 0x4A CreatureSay → добавляет в state.chat<br>✅ Повторный CharInfo → player.update (не appear)<br>✅ Словари classId → className работают |
+| `WsServer.test.ts` | Тесты для WebSocket сервера | ✅ Сервер стартует и принимает соединения<br>✅ При подключении: welcome + snapshot<br>✅ Запрос get.me возвращает данные me<br>✅ Subscribe на ["chat"] → только chat.message<br>✅ Ping → Pong |
+
+### Запуск тестов:
+
+```bash
+npm test              # Все тесты
+npm test -- src/__tests__   # Только новые тесты
+npm run test:watch    # Режим наблюдения
+npm run test:coverage # С покрытием
+```
+
+### Конфигурация Vitest (`vitest.config.ts`):
+- Environment: `node`
+- Setup files: `tests/setup.ts`
+- Include: `tests/**/*.test.ts`, `src/__tests__/**/*.test.ts`
+- Coverage: text, json, html репортеры
 
 ---
 
