@@ -1,6 +1,6 @@
 # Сводка по репозиторию L2 Headless Client
 
-> Дата: 2026-03-20
+> Дата: 2026-03-20 (обновлено)
 > Репозиторий: `c:\MyProg\l2J-Mobius-CT-0-Interlude\`
 > Назначение: Headless Lineage 2 клиент на TypeScript для сервера L2J_Mobius CT_0_Interlude
 
@@ -17,16 +17,42 @@ src/
 ├── infrastructure/   # Реализации - persistence, event-bus, protocol
 ├── api/              # REST + WebSocket API
 ├── network/          # TCP Connection с L2 framing
-└── game/             # GameClient, GameState, outgoing packets
+├── game/             # GameClient, GameState, outgoing packets
+│   └── entities/     # TypeScript интерфейсы для API (types.ts)
+└── config/di/        # DI Container
 ```
 
-### 2. DI Container (`src/config/di/`)
+### 2. Game Entity Types (`src/game/entities/types.ts`)
+
+TypeScript интерфейсы для API и WebSocket ответов ("плоские" данные из пакетов):
+
+| Интерфейс | Источник | Описание |
+|-----------|----------|----------|
+| `CharacterMe` | UserInfo (0x04) | Мой персонаж: статы, позиция, HP/MP/CP, скорости, клан/альянс |
+| `Player` | CharInfo (0x03) | Другие игроки: позиция, экипировка, расстояние до меня |
+| `Npc` | NpcInfo (0x16) | NPC/мобы: npcId, attackable, скорости, расстояние |
+| `DroppedItem` | SpawnItem/DropItem | Предмет на земле: itemId, count, позиция, расстояние |
+| `InventoryItem` | ItemList (0x1B) | Предмет в инвентаре: equipped, enchantLevel, bodyPart |
+| `Skill` | SkillList (0x58) | Скилл: passive/toggle флаги, cooldownRemaining |
+| `PartyMember` | Party* пакеты | Член группы: HP/MP/CP, уровень, класс |
+| `ChatMessage` | Say2 (0x4A) | Сообщение чата: тип, отправитель, текст |
+| `ActiveEffect` | AbnormalStatusUpdate | Бафф/дебафф: skillId, оставшиеся секунды |
+| `TargetInfo` | TargetSelected | Цель: тип (player/npc/item), HP |
+| `WsEvent<T>` | WebSocket | Обёртка WS-сообщения: type, ts, data |
+
+**Вспомогательные типы:**
+- `ClanInfo`, `AllyInfo` — информация о клане/альянсе
+- `Equipment` — Record<slot, EquipmentItem>
+- `ChatMessageType` — 'all' | 'shout' | 'whisper' | 'party' | 'clan' | 'trade' | 'hero' | 'system'
+- `TargetType` — 'player' | 'npc' | 'item'
+
+### 3. DI Container (`src/config/di/`)
 
 - Кастомная реализация с `Result<T,E>` монадой
 - Регистрация сервисов в `composition.ts`
 - Токены: `DI_TOKENS.EventBus`, `DI_TOKENS.CharacterRepository`, etc.
 
-### 3. Обработка пакетов (Новая архитектура)
+### 4. Обработка пакетов (Новая архитектура)
 
 | Компонент | Файл | Описание |
 |-----------|------|----------|
@@ -34,7 +60,7 @@ src/
 | Processor | `GamePacketProcessor.ts` | Middleware + Strategy pattern |
 | Registry | `PacketRegistry.ts` | Централизованная конфигурация всех пакетов |
 
-### 4. Уже распарсенные пакеты (11 штук)
+### 5. Уже распарсенные пакеты (11 штук)
 
 | Opcode | Пакет | Описание | Handler |
 |--------|-------|----------|---------|
@@ -50,7 +76,7 @@ src/
 | 0x0C | DropItemPacket | Выпадение предмета | DropItemHandler |
 | 0x0E | StatusUpdatePacket | Обновление HP/MP/CP | StatusUpdateHandler |
 
-### 5. Domain Events (уже реализованы)
+### 6. Domain Events (уже реализованы)
 
 **CharacterEvents:**
 - `CharacterEnteredGameEvent`
@@ -90,7 +116,7 @@ src/
 - `StateChangedEvent`
 - `ConnectionPhaseChangedEvent`
 
-### 6. WebSocket Server (`src/api/ws/WsServer.ts`)
+### 7. WebSocket Server (`src/api/ws/WsServer.ts`)
 
 - Работает на порту 3000/ws (shared mode с HTTP сервером)
 - Подписка на `IEventBus` через `subscribeAll()`
@@ -110,7 +136,7 @@ src/
   { "type": "subscribe", "channels": ["character", "combat"] }
   ```
 
-### 7. In-Memory Repositories
+### 8. In-Memory Repositories
 
 | Repository | Файл | Хранит |
 |------------|------|--------|
@@ -119,7 +145,7 @@ src/
 | `InMemoryInventoryRepository` | `src/infrastructure/persistence/InMemoryInventoryRepository.ts` | Инвентарь |
 | `InMemoryConnectionRepository` | `src/infrastructure/persistence/InMemoryConnectionRepository.ts` | Состояние подключения |
 
-### 8. Зависимости (`package.json`)
+### 9. Зависимости (`package.json`)
 
 ```json
 {
