@@ -279,11 +279,24 @@ export class GameCommandManagerClass {
             return false;
         }
 
-        // Двигаемся к предмету
-        const moveSuccess = this.moveTo(item.position.x, item.position.y, item.position.z);
+        // Проверяем расстояние до предмета
+        const char = this.deps.characterRepo.get();
+        if (!char) {
+            Logger.warn('GameCommandManager', 'Cannot pickup: character not found');
+            return false;
+        }
 
-        if (moveSuccess) {
-            Logger.info('GameCommandManager', `Moving to pickup: ${item.name} (${objectId}) at ${item.position.x},${item.position.y},${item.position.z}`);
+        const distance = char.position.distanceTo(item.position);
+        if (distance > 150) {
+            Logger.warn('GameCommandManager', `Item ${objectId} is too far (${distance.toFixed(1)}m), move closer first`);
+            return false;
+        }
+
+        // Отправляем Action пакет для поднятия (как в обычном клиенте)
+        const success = this.action(objectId, false);
+        
+        if (success) {
+            Logger.info('GameCommandManager', `Pickup item: ${item.name} (${objectId})`);
 
             // Публикуем событие
             this.deps.eventBus.publish({
@@ -297,17 +310,9 @@ export class GameCommandManagerClass {
                 },
                 timestamp: new Date(),
             });
-
-            // Отправляем Action пакет для поднятия
-            setTimeout(() => {
-                this.action(objectId, false);
-                Logger.info('GameCommandManager', `Clicked on item ${objectId} to pickup`);
-            }, 500);
-
-            return true;
         }
 
-        return false;
+        return success;
     }
 
     /**
