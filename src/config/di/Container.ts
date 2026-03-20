@@ -219,4 +219,9 @@ export const DI_TOKENS = {
 
     // Cache
     CacheManager: Symbol('CacheManager'),
+
+    // GameState
+    GameState: Symbol('GameState'),
+    GameStateUpdater: Symbol('GameStateUpdater'),
+    WsApiServer: Symbol('WsApiServer'),
 } as const;

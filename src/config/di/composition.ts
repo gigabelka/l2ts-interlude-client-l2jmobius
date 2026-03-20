@@ -44,6 +44,11 @@ import {
 } from '../../infrastructure/protocol';
 import { globalPacketSerializer } from '../../infrastructure/network/PacketSerializer';
 
+// GameState
+import { GameState } from '../../game/GameState';
+import { GameStateUpdater } from '../../game/GameStateUpdater';
+import type { WsApiServer } from '../../ws/WsServer';
+
 /**
  * Создать и настроить DI контейнер
  */
@@ -137,6 +142,45 @@ export function createContainer(): Container {
     );
 
     // ============================================================================
+    // GameState (Singleton) - единое хранилище состояния игры
+    // ============================================================================
+
+    const gameState = new GameState();
+    container.registerInstance(
+        DI_TOKENS.GameState,
+        gameState
+    );
+
+    // ============================================================================
+    // GameStateUpdater (Singleton) - мост между пакетами и GameState
+    // ============================================================================
+
+    container.registerInstance(
+        DI_TOKENS.GameStateUpdater,
+        new GameStateUpdater(gameState)
+    );
+
+    // ============================================================================
+    // WsApiServer (Singleton) - будет инициализирован позже после входа в игру
+    // ============================================================================
+
+    container.register<WsApiServer>(
+        DI_TOKENS.WsApiServer,
+        () => {
+            // Lazy initialization - создаётся при первом resolve после входа в игру
+            const { WsApiServer: WsApiServerClass } = require('../../ws/WsServer');
+            const { WS_CONFIG } = require('../../config');
+            return new WsApiServerClass(gameState, {
+                port: WS_CONFIG.port,
+                authEnabled: WS_CONFIG.authEnabled,
+                authTokens: WS_CONFIG.authTokens,
+                maxClients: WS_CONFIG.maxClients,
+            });
+        },
+        false // transient - создаётся один раз при первом вызове
+    );
+
+    // ============================================================================
     // Packet Processor (Transient) - configured with all handlers
     // ============================================================================
 
@@ -157,6 +201,23 @@ export function createContainer(): Container {
                     inventory: c.resolve<IInventoryRepository>(DI_TOKENS.InventoryRepository).getOrThrow(),
                 }
             );
+
+            // Add middleware for GameStateUpdater
+            const gameStateUpdater = c.resolve<GameStateUpdater>(DI_TOKENS.GameStateUpdater).getOrThrow();
+            processor.use((context, packet, next) => {
+                // Call next first to let handlers process the packet
+                next();
+                
+                // After handlers process the packet, update GameState
+                if (packet && 'opcode' in packet) {
+                    const opcode = (packet as { opcode: number }).opcode;
+                    // Get parsed data from packet if available
+                    const data = 'getData' in packet 
+                        ? (packet as { getData: () => unknown }).getData() 
+                        : context.rawBody;
+                    gameStateUpdater.handlePacket(opcode, data);
+                }
+            });
             
             return processor;
         },

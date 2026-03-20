@@ -19,6 +19,8 @@ import { GameClientNew } from './game/GameClient';
 import { LoginClientNew } from './login/LoginClient';
 import { initGameCommandManager } from './game/GameCommandManager';
 import Connection from './network/Connection';
+import { GameState } from './game/GameState';
+import { WsApiServer } from './ws/WsServer';
 
 
 // API
@@ -30,6 +32,7 @@ import { WsServerNew } from './api/ws/WsServer';
 import { destroyDashboard } from './ui/Dashboard';
 
 import type { SessionData } from './login/types';
+import { WS_CONFIG } from './config';
 
 // ============================================================================
 // ИНИЦИАЛИЗАЦИЯ
@@ -86,6 +89,40 @@ async function initApiServer(): Promise<{ api: ApiServer; ws: WsServerNew }> {
 // ОБРАБОТКА СОБЫТИЙ
 // ============================================================================
 
+// Глобальные ссылки для cleanup
+let wsApiServer: WsApiServer | null = null;
+
+/**
+ * Инициализация WebSocket API сервера (вызывается после входа в игру)
+ */
+function initWsApiServer(): void {
+    if (!WS_CONFIG.enabled) {
+        Logger.info('Bootstrap', 'WebSocket API is disabled');
+        return;
+    }
+
+    if (wsApiServer) {
+        Logger.warn('Bootstrap', 'WebSocket API server already initialized');
+        return;
+    }
+
+    try {
+        const container = getContainer();
+        const gameState = container.resolve<GameState>(DI_TOKENS.GameState).getOrThrow();
+
+        wsApiServer = new WsApiServer(gameState, {
+            port: WS_CONFIG.port,
+            authEnabled: WS_CONFIG.authEnabled,
+            authTokens: WS_CONFIG.authTokens,
+            maxClients: WS_CONFIG.maxClients,
+        });
+
+        Logger.info('Bootstrap', `✅ WebSocket API server started on port ${WS_CONFIG.port}`);
+    } catch (error) {
+        Logger.error('Bootstrap', `Failed to start WebSocket API: ${error}`);
+    }
+}
+
 /**
  * Обработка завершения логина
  */
@@ -128,6 +165,13 @@ function onLoginComplete(session: SessionData): void {
         commandManager,
         packetSerializer,
     }, connection);
+
+    // Подписываемся на событие входа в игру для запуска WebSocket API
+    eventBus.subscribe('CharacterEnteredGameEvent', () => {
+        Logger.info('Bootstrap', '🎮 Character entered game - initializing WebSocket API...');
+        initWsApiServer();
+    });
+
     gameClient.start();
 }
 
@@ -139,6 +183,12 @@ function shutdown(services: { api: ApiServer; ws: WsServerNew }): void {
 
     services.api.stop();
     services.ws.stop();
+
+    // Останавливаем WebSocket API сервер
+    if (wsApiServer) {
+        wsApiServer.stop();
+        wsApiServer = null;
+    }
 
     // Очищаем репозитории
     const container = getContainer();
@@ -165,6 +215,7 @@ async function main(): Promise<void> {
     Logger.info('Bootstrap', '🎮 L2 Headless Client — Interlude CT0 (Clean Architecture)');
     Logger.info('Bootstrap', '='.repeat(60));
     Logger.info('Bootstrap', `API Server : http://${CONFIG.LoginIp}:3000`);
+    Logger.info('Bootstrap', `WS API     : ws://${CONFIG.LoginIp}:${WS_CONFIG.port} (enabled: ${WS_CONFIG.enabled})`);
     Logger.info('Bootstrap', `Login      : ${CONFIG.LoginIp}:${CONFIG.LoginPort}`);
     Logger.info('Bootstrap', `User       : ${CONFIG.Username}`);
     Logger.info('Bootstrap', `Server     : ${CONFIG.ServerId}`);

@@ -210,3 +210,44 @@ export const GamePort = SERVER_CONFIG.gamePort;
 export const Protocol = SERVER_CONFIG.protocol;
 export const ServerId = SERVER_CONFIG.serverId;
 export const CharSlotIndex = SERVER_CONFIG.charSlotIndex;
+
+// =============================================================================
+// WebSocket API Configuration
+// =============================================================================
+
+const WsConfigSchema = z.object({
+    enabled: z.boolean(),
+    port: z.number().int().min(1).max(65535),
+    authEnabled: z.boolean(),
+    authTokens: z.array(z.string()),
+    maxClients: z.number().int().min(1).max(100),
+});
+
+export type WsConfig = z.infer<typeof WsConfigSchema>;
+
+function validateWsConfig(): WsConfig {
+    const rawConfig = {
+        enabled: process.env['WS_ENABLED'] !== 'false', // true by default
+        port: parseInt(process.env['WS_PORT'] || '3001', 10), // Default 3001 to avoid conflict with API
+        authEnabled: process.env['WS_AUTH_ENABLED'] === 'true',
+        authTokens: process.env['WS_AUTH_TOKENS']?.split(',').filter(Boolean) || [],
+        maxClients: parseInt(process.env['WS_MAX_CLIENTS'] || '10', 10),
+    };
+
+    const result = WsConfigSchema.safeParse(rawConfig);
+
+    if (!result.success) {
+        Logger.error('CONFIG', '❌ WebSocket configuration validation failed:');
+        for (const issue of result.error.issues) {
+            Logger.error('CONFIG', `  - ${issue.path.join('.')}: ${issue.message}`);
+        }
+        process.exit(1);
+    }
+
+    return result.data;
+}
+
+/**
+ * WebSocket API конфигурация
+ */
+export const WS_CONFIG = validateWsConfig();
