@@ -503,19 +503,44 @@ class PacketConsole extends EventTarget {
      * Adapts message format to packet format
      */
     onWsMessage(message) {
-        // Determine direction based on message context
-        // By default, incoming messages from wsClient are server→client
-        const direction = message._direction || 'in';
-        
-        // Extract packet info
+        // Обработка server_packet от PacketBroadcastService
+        if (message.type === 'server_packet' && message.payload) {
+            const p = message.payload;
+            this.addPacket({
+                type: p.name || `Packet_${p.opcodeHex}`,
+                direction: p.direction === 'client_to_server' ? 'out' : 'in',
+                opcode: p.opcodeHex || p.opcode,
+                data: p.data,
+                channel: 'packets'
+            });
+            return;
+        }
+
+        // Обработка batch (WsApiServer шлёт batch при подключении)
+        if (message.type === 'batch' && Array.isArray(message.events)) {
+            for (const event of message.events) {
+                if (event.type === 'server_packet' && event.data) {
+                    const p = event.data;
+                    this.addPacket({
+                        type: p.name || `Packet_${p.opcodeHex}`,
+                        direction: p.direction === 'client_to_server' ? 'out' : 'in',
+                        opcode: p.opcodeHex || p.opcode,
+                        data: p.data,
+                        channel: 'packets'
+                    });
+                }
+            }
+            return;
+        }
+
+        // Остальные сообщения (доменные события) — показываем как есть
         const packet = {
             type: message.type || 'unknown',
-            direction: direction,
+            direction: message._direction || 'in',
             data: message.payload || message.data || message,
             opcode: message.opcode,
             channel: message.channel
         };
-        
         this.addPacket(packet);
     }
 }
