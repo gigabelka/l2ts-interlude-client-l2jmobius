@@ -19,3 +19,26 @@ export { AbnormalStatusUpdatePacket, type AbnormalStatusUpdateData, type Abnorma
 export { MagicSkillUsePacket, type MagicSkillUseData } from './MagicSkillUsePacket';
 export { MyTargetSelectedPacket, type MyTargetSelectedData } from './MyTargetSelectedPacket';
 export { TargetUnselectedPacket, type TargetUnselectedData } from './TargetUnselectedPacket';
+
+// Дополнительные пакеты (не требуют handlers)
+export { TeleportToLocationPacket, type TeleportToLocationData } from './TeleportToLocationPacket';
+export { ChangeWaitTypePacket, type ChangeWaitTypeData } from './ChangeWaitTypePacket';
+export { StopMovePacket, type StopMoveData } from './StopMovePacket';
+
+// Пакеты с парсерами без handlers
+export { GenericServerPacket, type GenericServerPacketData, createGenericPacketClass } from './GenericServerPacket';
+export { SystemMessagePacket, type SystemMessageData } from './SystemMessagePacket';
+export { NpcSayPacket, type NpcSayData } from './NpcSayPacket';
+export { NpcHtmlMessagePacket, type NpcHtmlMessageData } from './NpcHtmlMessagePacket';
+export { ActionFailedPacket, type ActionFailedData } from './ActionFailedPacket';
+export { TargetSelectedPacket, type TargetSelectedData } from './TargetSelectedPacket';
+export { SocialActionPacket, type SocialActionData } from './SocialActionPacket';
+export { ChangeMoveTypePacket, type ChangeMoveTypeData } from './ChangeMoveTypePacket';
+export { ValidateLocationPacket, type ValidateLocationData } from './ValidateLocationPacket';
+export { GetItemPacket, type GetItemData } from './GetItemPacket';
+export { MagicSkillLaunchedPacket, type MagicSkillLaunchedData } from './MagicSkillLaunchedPacket';
+export { AutoAttackStartPacket, type AutoAttackStartData } from './AutoAttackStartPacket';
+export { AutoAttackStopPacket, type AutoAttackStopData } from './AutoAttackStopPacket';
+export { MoveToPawnPacket, type MoveToPawnData } from './MoveToPawnPacket';
+export { SetupGaugePacket, type SetupGaugeData } from './SetupGaugePacket';
+export { ExPacket, type ExPacketData } from './ExPacket';
