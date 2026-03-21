@@ -19,6 +19,7 @@ import { GameState } from '../game/GameState';
 import { validateToken, extractToken } from './auth';
 import { Logger } from '../logger/Logger';
 import { HttpEndpoints } from './HttpEndpoints';
+import { PacketBroadcastService, type WsPacketMessage } from '../services/PacketBroadcastService';
 
 /**
  * Конфигурация WebSocket сервера
@@ -88,6 +89,13 @@ interface WsEvent<T = unknown> {
 }
 
 /**
+ * Расширенное событие с поддержкой direction (для пакетов)
+ */
+interface WsPacketEvent extends WsEvent<WsPacketMessage> {
+    direction?: 'server_to_client' | 'client_to_server';
+}
+
+/**
  * Батч событий
  */
 interface BatchEvent {
@@ -109,6 +117,7 @@ export class WsApiServer {
     private startTime: number = Date.now();
     private boundBroadcast: (event: WsEvent) => void;
     private httpEndpoints: HttpEndpoints;
+    private packetBroadcast: PacketBroadcastService;
 
     // Throttling для move событий
     private lastMoveTime: Map<number, number> = new Map(); // objectId -> timestamp
@@ -123,6 +132,9 @@ export class WsApiServer {
     private totalEventsSent: number = 0;
     private readonly METRICS_WINDOW_MS = 10000; // 10 секунд окно
 
+    // Отписка от broadcast service
+    private unsubscribePackets: (() => void) | null = null;
+
     /**
      * Создаёт WebSocket сервер с HTTP эндпоинтами
      * @param state - GameState для трансляции
@@ -132,6 +144,7 @@ export class WsApiServer {
         this.state = state;
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.boundBroadcast = this.broadcast.bind(this);
+        this.packetBroadcast = PacketBroadcastService.getInstance();
 
         // Создаём HTTP сервер
         this.httpServer = http.createServer();
@@ -155,6 +168,11 @@ export class WsApiServer {
 
         // Подписываемся на события от GameState
         this.state.on('ws:event', this.boundBroadcast);
+
+        // Подписываемся на пакеты от PacketBroadcastService
+        this.unsubscribePackets = this.packetBroadcast.subscribe((packet) => {
+            this.broadcastPacket(packet);
+        });
 
         // Настраиваем обработку подключений WebSocket
         this.wss.on('connection', this.onConnect.bind(this));
@@ -249,6 +267,11 @@ export class WsApiServer {
             },
         };
         this.sendToClient(ws, welcomeEvent);
+
+        // Отправляем накопленные пакеты из ring buffer (если клиент подписан на 'packets')
+        if (clientState.channels.has('*') || clientState.channels.has('packets')) {
+            this.sendBufferedPackets(ws);
+        }
 
         // Отправляем снапшот состояния
         this.sendSnapshot(ws);
@@ -402,6 +425,7 @@ export class WsApiServer {
             'target',
             'movement',
             'skills',
+            'packets', // Канал для сырых пакетов от сервера
         ];
 
         if (message.channels && Array.isArray(message.channels)) {
@@ -452,6 +476,57 @@ export class WsApiServer {
             data: this.state.getSnapshot(),
         };
         this.sendToClient(ws, snapshotEvent);
+    }
+
+    /**
+     * Отправка накопленных пакетов из ring buffer
+     * @param ws - WebSocket клиента
+     */
+    private sendBufferedPackets(ws: WebSocketType): void {
+        const bufferedPackets = this.packetBroadcast.getBufferedPackets();
+        if (bufferedPackets.length === 0) {
+            return;
+        }
+
+        Logger.info('WsApiServer', `Sending ${bufferedPackets.length} buffered packets to new client`);
+
+        // Отправляем как батч
+        const batchEvent: BatchEvent = {
+            type: 'batch',
+            ts: Date.now(),
+            events: bufferedPackets.map(packet => ({
+                type: 'server_packet',
+                ts: packet.timestamp,
+                data: packet,
+            })),
+        };
+
+        this.sendToClient(ws, batchEvent);
+        this.totalEventsSent += bufferedPackets.length;
+    }
+
+    /**
+     * Broadcast пакета от сервера
+     * @param packet - пакет для отправки
+     */
+    private broadcastPacket(packet: WsPacketMessage): void {
+        const event: WsPacketEvent = {
+            type: 'server_packet',
+            ts: packet.timestamp,
+            data: packet,
+            direction: packet.direction,
+        };
+
+        // Отправляем подписанным на 'packets' или '*'
+        this.clients.forEach((client) => {
+            if (!client.authenticated) {
+                return;
+            }
+            if (client.channels.has('*') || client.channels.has('packets')) {
+                this.sendToClient(client.ws, event);
+                this.totalEventsSent++;
+            }
+        });
     }
 
     /**
@@ -651,6 +726,12 @@ export class WsApiServer {
 
         // Отписываемся от событий GameState
         this.state.off('ws:event', this.boundBroadcast);
+
+        // Отписываемся от пакетов
+        if (this.unsubscribePackets) {
+            this.unsubscribePackets();
+            this.unsubscribePackets = null;
+        }
 
         // Закрываем все соединения
         this.clients.forEach((client) => {

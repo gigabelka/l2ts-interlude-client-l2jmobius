@@ -31,6 +31,11 @@ import { MagicSkillUsePacket } from './packets/MagicSkillUsePacket';
 import { MyTargetSelectedPacket } from './packets/MyTargetSelectedPacket';
 import { TargetUnselectedPacket } from './packets/TargetUnselectedPacket';
 
+// Дополнительные пакеты (из GameStateUpdater)
+import { TeleportToLocationPacket } from './packets/TeleportToLocationPacket';
+import { ChangeWaitTypePacket } from './packets/ChangeWaitTypePacket';
+import { StopMovePacket } from './packets/StopMovePacket';
+
 // Handlers
 import { UserInfoHandler } from './handlers/UserInfoHandler';
 import { NpcInfoHandler } from './handlers/NpcInfoHandler';
@@ -53,6 +58,11 @@ import { AbnormalStatusUpdateHandler } from './handlers/AbnormalStatusUpdateHand
 import { MagicSkillUseHandler } from './handlers/MagicSkillUseHandler';
 import { MyTargetSelectedHandler } from './handlers/MyTargetSelectedHandler';
 import { TargetUnselectedHandler } from './handlers/TargetUnselectedHandler';
+
+// Дополнительные обработчики
+import { TeleportToLocationHandler } from './handlers/TeleportToLocationHandler';
+import { ChangeWaitTypeHandler } from './handlers/ChangeWaitTypeHandler';
+import { StopMoveHandler } from './handlers/StopMoveHandler';
 
 /**
  * Конфигурация пакета
@@ -207,6 +217,28 @@ const PACKET_REGISTRY: PacketConfig[] = [
         handlerClass: TargetUnselectedHandler,
         repositories: ['character'],
         description: 'TargetUnselected - сброс цели',
+    },
+    // Дополнительные пакеты (были только в GameStateUpdater)
+    {
+        opcode: 0x27,
+        packetClass: TeleportToLocationPacket,
+        handlerClass: TeleportToLocationHandler,
+        repositories: ['character', 'world'],
+        description: 'TeleportToLocation - телепорт сущности',
+    },
+    {
+        opcode: 0x2F,
+        packetClass: ChangeWaitTypePacket,
+        handlerClass: ChangeWaitTypeHandler,
+        repositories: ['character', 'world'],
+        description: 'ChangeWaitType - изменение состояния сидения/стояния',
+    },
+    {
+        opcode: 0x59,
+        packetClass: StopMovePacket,
+        handlerClass: StopMoveHandler,
+        repositories: ['character', 'world'],
+        description: 'StopMove - остановка движения',
     },
 ];
 

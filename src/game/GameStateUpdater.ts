@@ -49,6 +49,17 @@ const Opcodes = {
     STOP_MOVE: 0x59,
 } as const;
 
+// Интерфейс для Attack пакета
+interface AttackData {
+    attackerId: number;
+    targetId: number;
+    hits: Array<{
+        targetId: number;
+        damage: number;
+        flags: number;
+    }>;
+}
+
 // Тип сущности для разрешения
 enum EntityType {
     ME = 'me',
@@ -225,6 +236,9 @@ export class GameStateUpdater {
                 break;
             case Opcodes.STOP_MOVE:
                 this.handleStopMove(data as StopMoveData);
+                break;
+            case Opcodes.ATTACK:
+                this.handleAttack(data as AttackData);
                 break;
             default:
                 // Неизвестный пакет - игнорируем
@@ -923,6 +937,54 @@ export class GameStateUpdater {
             heading,
             distanceToMe: this.state.calcDistance(x, y),
         });
+    }
+
+    /**
+     * 0x05 Attack - атака и урон
+     */
+    private handleAttack(data: AttackData): void {
+        const { attackerId, targetId, hits } = data;
+        const attackerType = this.resolveEntityType(attackerId);
+        const targetType = this.resolveEntityType(targetId);
+
+        // Обновляем combat статус для атакующего
+        this.updateEntityCombatState(attackerId, attackerType, true);
+
+        // Отправляем событие combat.attack
+        this.state.update('combat.attack', {
+            attackerId,
+            attackerType,
+            targetId,
+            targetType,
+            hits: hits.map(hit => ({
+                targetId: hit.targetId,
+                damage: hit.damage,
+                isMiss: (hit.flags & 0x10) !== 0,
+                isCritical: (hit.flags & 0x20) !== 0,
+                isShielded: (hit.flags & 0x40) !== 0,
+            })),
+            totalDamage: hits.reduce((sum, hit) => sum + hit.damage, 0),
+            timestamp: Date.now(),
+        });
+    }
+
+    /**
+     * Обновляет combat состояние сущности
+     */
+    private updateEntityCombatState(
+        objectId: number,
+        entityType: EntityType,
+        inCombat: boolean
+    ): void {
+        if (entityType === EntityType.ME && this.state.me) {
+            this.state.me.isInCombat = inCombat;
+        } else if (entityType === EntityType.PLAYER) {
+            const player = this.state.players.get(objectId);
+            if (player) {
+                player.isInCombat = inCombat;
+            }
+        }
+        // Для NPC combat state обычно не отслеживается в GameState
     }
 
     // ============================================================================

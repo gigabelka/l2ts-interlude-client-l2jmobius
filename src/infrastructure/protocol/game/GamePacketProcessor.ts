@@ -15,6 +15,7 @@ import type {
 import type { IEventBus } from '../../../application/ports';
 import type { GameIncomingPacketFactory } from './GameIncomingPacketFactory';
 import { PacketReader } from '../../../network/PacketReader';
+import { PacketBroadcastService } from '../../../services/PacketBroadcastService';
 
 /**
  * Middleware для обработки пакетов
@@ -28,15 +29,21 @@ export type PacketMiddleware = (
 /**
  * Процессор пакетов Game Server
  * Соединяет Factory и Strategy паттерны
+ * 
+ * Архитектурный принцип: каждый пакет от сервера СНАЧАЛА отправляется в WS,
+ * ПОТОМ обрабатывается внутренней логикой.
  */
 export class GamePacketProcessor implements IPacketProcessor {
     private handlers: IPacketHandlerStrategy[] = [];
     private middlewares: PacketMiddleware[] = [];
+    private broadcastService: PacketBroadcastService;
 
     constructor(
         private factory: GameIncomingPacketFactory,
         _eventBus: IEventBus
-    ) {}
+    ) {
+        this.broadcastService = PacketBroadcastService.getInstance();
+    }
 
     /**
      * Регистрация стратегии обработки
@@ -55,6 +62,9 @@ export class GamePacketProcessor implements IPacketProcessor {
 
     /**
      * Обработать пакет
+     * 
+     * ВАЖНО: Broadcast в WebSocket выполняется ДО внутренней обработки,
+     * чтобы гарантировать, что WS-клиент видит всё то же, что и клиент.
      */
     process(opcode: number, data: Buffer, state: string): PacketResult {
         const context: PacketContext = {
@@ -66,6 +76,9 @@ export class GamePacketProcessor implements IPacketProcessor {
 
         // Проверяем поддержку опкода
         if (!this.factory.supports(opcode)) {
+            // Даже неизвестные опкоды отправляем в WS для отладки
+            this.broadcastService.broadcastRaw(opcode, 'UnknownPacket', data, 'server_to_client');
+            
             return {
                 success: false,
                 error: `Unknown opcode: 0x${opcode.toString(16).padStart(2, '0')}`,
@@ -73,9 +86,16 @@ export class GamePacketProcessor implements IPacketProcessor {
             };
         }
 
+        // Получаем метаданные пакета для имени
+        const metadata = this.factory.getMetadata(opcode);
+        const packetName = metadata?.name || `Packet_0x${opcode.toString(16).padStart(2, '0')}`;
+
         // Создаем пакет через фабрику
         const createResult = this.factory.createFromBuffer(opcode, data);
         if (createResult.isErr()) {
+            // Даже при ошибке создания отправляем в WS сырые данные
+            this.broadcastService.broadcastRaw(opcode, packetName, data, 'server_to_client');
+            
             return {
                 success: false,
                 error: createResult.error?.message || 'Unknown error',
@@ -85,7 +105,29 @@ export class GamePacketProcessor implements IPacketProcessor {
 
         const packet = createResult.getOrThrow();
 
-        // Выполняем middleware chain
+        // === ВАЖНО: Broadcast в WebSocket СНАЧАЛА ===
+        // Получаем распарсенные данные из пакета если возможно
+        let packetData: unknown;
+        try {
+            if ('getData' in packet && typeof packet.getData === 'function') {
+                packetData = packet.getData();
+            } else {
+                // Если getData недоступен, используем сырые данные
+                packetData = { rawLength: data.length };
+            }
+        } catch {
+            packetData = { rawLength: data.length, parseError: true };
+        }
+
+        // Отправляем в WS (неблокирующе, с защитой от ошибок)
+        try {
+            this.broadcastService.broadcast(opcode, packetName, packetData, 'server_to_client');
+        } catch (error) {
+            // Логируем ошибку, но не прерываем обработку пакета
+            console.error(`[GamePacketProcessor] Broadcast error for opcode ${opcode}:`, error);
+        }
+
+        // === Теперь выполняем middleware chain и обработчики ===
         let middlewareIndex = 0;
         let handlerExecuted = false;
 
