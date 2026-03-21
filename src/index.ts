@@ -94,7 +94,7 @@ async function initApiServer(): Promise<{ api: ApiServer; ws: WsServerNew }> {
 let wsApiServer: WsApiServer | null = null;
 
 /**
- * Инициализация WebSocket API сервера (вызывается после входа в игру)
+ * Инициализация WebSocket API сервера (вызывается до подключения к Game Server)
  */
 function initWsApiServer(): void {
     if (!WS_CONFIG.enabled) {
@@ -172,11 +172,9 @@ function onLoginComplete(session: SessionData): void {
         gameState,
     }, connection);
 
-    // Подписываемся на событие входа в игру для запуска WebSocket API
-    eventBus.subscribe('CharacterEnteredGameEvent', () => {
-        Logger.info('Bootstrap', '🎮 Character entered game - initializing WebSocket API...');
-        initWsApiServer();
-    });
+    // Запускаем WS API СНАЧАЛА, чтобы он подписался на PacketBroadcastService
+    // ДО того, как GameClient начнёт получать пакеты
+    initWsApiServer();
 
     gameClient.start();
 }
