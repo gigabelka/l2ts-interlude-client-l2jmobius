@@ -111,6 +111,16 @@ export class GamePacketProcessor implements IPacketProcessor {
 
         const packet = createResult.getOrThrow();
 
+        // === ДЕКОДИРУЕМ ПАКЕТ СРАЗУ ПОСЛЕ СОЗДАНИЯ ===
+        // Фабрика создаёт пакет, но НЕ вызывает decode() - делаем это здесь
+        try {
+            const reader = new PacketReader(data, 1); // пропускаем 1 байт opcode
+            packet.decode(reader);
+        } catch (decodeError) {
+            console.error(`[GamePacketProcessor] Decode error for opcode ${opcode}:`, decodeError);
+            // Продолжаем обработку - пакет будет отправлен в WS как raw
+        }
+
         // === ВАЖНО: Broadcast в WebSocket СНАЧАЛА ===
         // Получаем распарсенные данные из пакета если возможно
         let packetData: unknown;
