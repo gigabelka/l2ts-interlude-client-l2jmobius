@@ -16,6 +16,7 @@ import type { IEventBus } from '../../../application/ports';
 import type { GameIncomingPacketFactory } from './GameIncomingPacketFactory';
 import { PacketReader } from '../../../network/PacketReader';
 import { PacketBroadcastService } from '../../../services/PacketBroadcastService';
+import { WsAuditService } from '../../../services/WsAuditService';
 
 /**
  * Middleware для обработки пакетов
@@ -37,12 +38,14 @@ export class GamePacketProcessor implements IPacketProcessor {
     private handlers: IPacketHandlerStrategy[] = [];
     private middlewares: PacketMiddleware[] = [];
     private broadcastService: PacketBroadcastService;
+    private auditService: WsAuditService;
 
     constructor(
         private factory: GameIncomingPacketFactory,
         _eventBus: IEventBus
     ) {
         this.broadcastService = PacketBroadcastService.getInstance();
+        this.auditService = WsAuditService.getInstance();
     }
 
     /**
@@ -67,6 +70,9 @@ export class GamePacketProcessor implements IPacketProcessor {
      * чтобы гарантировать, что WS-клиент видит всё то же, что и клиент.
      */
     process(opcode: number, data: Buffer, state: string): PacketResult {
+        // === АУДИТ: Учитываем КАЖДЫЙ полученный пакет ===
+        this.auditService.incrementReceived();
+
         const context: PacketContext = {
             opcode,
             state,

@@ -243,6 +243,7 @@ const WsConfigSchema = z.object({
   maxClients: z.number().int().min(1).max(100),
   batchInterval: z.number().int().min(0).max(1000),
   moveThrottleMs: z.number().int().min(0).max(1000),
+  debugAudit: z.boolean(),
 });
 
 export type WsConfig = z.infer<typeof WsConfigSchema>;
@@ -256,6 +257,7 @@ function validateWsConfig(): WsConfig {
     maxClients: parseInt(process.env["WS_MAX_CLIENTS"] || "10", 10),
     batchInterval: parseInt(process.env["WS_BATCH_INTERVAL"] || "50", 10),
     moveThrottleMs: parseInt(process.env["WS_MOVE_THROTTLE_MS"] || "100", 10),
+    debugAudit: process.env["DEBUG_WS_AUDIT"] === "true",
   };
 
   const result = WsConfigSchema.safeParse(rawConfig);

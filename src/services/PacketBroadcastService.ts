@@ -11,6 +11,8 @@
  * - Неблокирующая отправка с try/catch
  */
 
+import { WsAuditService } from './WsAuditService';
+
 /**
  * Формат сообщения для WebSocket
  */
@@ -101,8 +103,12 @@ export class PacketBroadcastService {
     // Константы
     private readonly RING_BUFFER_SIZE = 1000;
 
+    // Сервис аудита
+    private auditService: WsAuditService;
+
     private constructor() {
         this.ringBuffer = new RingBuffer<WsPacketMessage>(this.RING_BUFFER_SIZE);
+        this.auditService = WsAuditService.getInstance();
     }
 
     /**
@@ -151,8 +157,11 @@ export class PacketBroadcastService {
         this.ringBuffer.push(message);
         this.packetCounter++;
 
+        // Обновляем размер очереди в аудите
+        this.auditService.updateQueueSize(this.ringBuffer.size());
+
         // Отправляем подписчикам (неблокирующе)
-        this.notifySubscribers(message);
+        this.notifySubscribers(message, opcode, name);
     }
 
     /**
@@ -219,15 +228,34 @@ export class PacketBroadcastService {
 
     /**
      * Уведомить всех подписчиков (с защитой от ошибок)
+     * Возвращает количество успешно уведомлённых подписчиков
      */
-    private notifySubscribers(message: WsPacketMessage): void {
+    private notifySubscribers(
+        message: WsPacketMessage,
+        opcode: number,
+        name: string
+    ): void {
+        let successCount = 0;
+
         for (const callback of this.subscribers) {
             try {
                 callback(message);
+                successCount++;
             } catch (error) {
                 // Логируем ошибку, но не прерываем других подписчиков
                 console.error('[PacketBroadcastService] Error notifying subscriber:', error);
+                // Регистрируем потерю пакета из-за ошибки
+                this.auditService.reportLost(opcode, name, 'broadcast_error');
             }
+        }
+
+        // Увеличиваем счётчик отправленных пакетов
+        // Если нет подписчиков, пакет всё равно сохранён в ring buffer
+        this.auditService.incrementSent();
+
+        // Если нет подписчиков - отмечаем как потерю (но это нормально при старте)
+        if (this.subscribers.length === 0) {
+            this.auditService.reportLost(opcode, name, 'no_subscribers');
         }
     }
 }

@@ -20,6 +20,7 @@ import { validateToken, extractToken } from './auth';
 import { Logger } from '../logger/Logger';
 import { HttpEndpoints } from './HttpEndpoints';
 import { PacketBroadcastService, type WsPacketMessage } from '../services/PacketBroadcastService';
+import { WsAuditService } from '../services/WsAuditService';
 
 /**
  * Конфигурация WebSocket сервера
@@ -37,6 +38,8 @@ export interface WsConfig {
     batchInterval: number;
     /** Throttling для move событий в мс (по умолчанию 100) */
     moveThrottleMs: number;
+    /** Включить аудит доставки пакетов */
+    debugAudit?: boolean;
 }
 
 /**
@@ -49,6 +52,7 @@ const DEFAULT_CONFIG: WsConfig = {
     maxClients: 10,
     batchInterval: 50,
     moveThrottleMs: 100,
+    debugAudit: false,
 };
 
 /**
@@ -145,6 +149,11 @@ export class WsApiServer {
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.boundBroadcast = this.broadcast.bind(this);
         this.packetBroadcast = PacketBroadcastService.getInstance();
+        
+        // Обновляем дефолтный конфиг для debugAudit
+        if (config.debugAudit !== undefined) {
+            this.config.debugAudit = config.debugAudit;
+        }
 
         // Создаём HTTP сервер
         this.httpServer = http.createServer();
@@ -186,6 +195,11 @@ export class WsApiServer {
 
         // Запускаем таймер метрик
         this.startMetricsTimer();
+
+        // Инициализируем аудит если включен
+        if (config.debugAudit) {
+            WsAuditService.getInstance().enable();
+        }
 
         // Логируем конфигурацию
         if (this.config.batchInterval > 0) {
@@ -375,6 +389,14 @@ export class WsApiServer {
                         type: 'stats',
                         ts: Date.now(),
                         data: this.getStats(),
+                    });
+                    break;
+
+                case 'get_audit_stats':
+                    this.sendToClient(client.ws, {
+                        type: 'audit_stats',
+                        ts: Date.now(),
+                        data: WsAuditService.getInstance().getStats(),
                     });
                     break;
 

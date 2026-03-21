@@ -118,6 +118,7 @@ function initWsApiServer(): void {
             maxClients: WS_CONFIG.maxClients,
             batchInterval: WS_CONFIG.batchInterval,
             moveThrottleMs: WS_CONFIG.moveThrottleMs,
+            debugAudit: WS_CONFIG.debugAudit,
         });
 
         Logger.info('Bootstrap', `✅ WebSocket API server started on port ${WS_CONFIG.port}`);

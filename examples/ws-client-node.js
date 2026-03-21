@@ -64,6 +64,9 @@ ws.on("open", () => {
         type: "subscribe", 
         channels: CHANNELS 
     }));
+    
+    // Запрашиваем статистику аудита (если DEBUG_WS_AUDIT включен)
+    ws.send(JSON.stringify({ type: "get_audit_stats" }));
 });
 
 ws.on("message", (raw) => {
@@ -242,6 +245,19 @@ ws.on("message", (raw) => {
             case "batch": {
                 console.log(`${colors.yellow}[${ts}]${colors.reset} 📦 Batch: ${event.data.length} events\n`);
                 // Можно развернуть события внутри батча
+                break;
+            }
+            
+            case "audit_stats": {
+                const a = event.data;
+                const lostColor = a.lost > 0 ? colors.red : colors.green;
+                console.log(`${colors.yellow}[${ts}]${colors.reset} 🔍 Audit stats: Received=${a.packetsReceived}, Sent=${a.packetsSentToWs}, ${lostColor}Lost=${a.lost}${colors.reset}, Queue=${a.queueSize}`);
+                if (a.lostPackets && a.lostPackets.length > 0) {
+                    console.log(`   ⚠️ Recent lost packets:`);
+                    a.lostPackets.slice(0, 5).forEach(pkt => {
+                        console.log(`      - ${pkt.name} (${pkt.opcodeHex}): ${pkt.reason}`);
+                    });
+                }
                 break;
             }
             
