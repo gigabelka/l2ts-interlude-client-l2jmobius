@@ -267,166 +267,54 @@
 
             <!-- WebSocket Monitor Tab -->
             <section id="tab-ws-monitor" class="tab-content">
-                <!-- Connection Mode Selector -->
-                <article class="panel">
-                    <header>
-                        <h3><i data-lucide="settings-2"></i> Connection Settings</h3>
-                    </header>
-                    <div class="ws-mode-selector">
-                        <label class="ws-mode-option">
-                            <input type="radio" name="ws-mode" value="shared" checked>
-                            <span class="ws-mode-label">
-                                <strong>Shared Mode</strong>
-                                <small>ws://localhost:3000/ws (with API)</small>
-                            </span>
-                        </label>
-                        <label class="ws-mode-option">
-                            <input type="radio" name="ws-mode" value="standalone">
-                            <span class="ws-mode-label">
-                                <strong>Standalone Mode</strong>
-                                <small>ws://localhost:8080 (packet stream)</small>
-                            </span>
-                        </label>
-                    </div>
-                </article>
-
-                <div class="grid">
-                    <!-- WS Connection Status -->
-                    <article class="panel">
-                        <header>
-                            <h3><i data-lucide="radio"></i> Connection Status</h3>
-                            <div class="header-actions">
-                                <button id="ws-btn-connect" class="small">Connect</button>
-                                <button id="ws-btn-disconnect" class="secondary small">Disconnect</button>
-                            </div>
-                        </header>
-                        <div class="ws-status-grid">
-                            <div class="ws-stat">
-                                <label>Status</label>
-                                <span id="ws-status-text" class="ws-badge disconnected">DISCONNECTED</span>
-                            </div>
-                            <div class="ws-stat">
-                                <label>URL</label>
-                                <code id="ws-url" class="ws-code">--</code>
-                            </div>
-                            <div class="ws-stat">
-                                <label>Latency</label>
-                                <span id="ws-latency">-- ms</span>
-                            </div>
-                            <div class="ws-stat">
-                                <label>Reconnect Attempts</label>
-                                <span id="ws-reconnect-count">0</span>
-                            </div>
-                            <div class="ws-stat">
-                                <label>Uptime</label>
-                                <span id="ws-uptime">--</span>
-                            </div>
-                            <div class="ws-stat">
-                                <label>Messages</label>
-                                <span id="ws-msg-count">0</span>
-                            </div>
+                <div class="packet-console">
+                    <!-- Top Panel - Filters -->
+                    <div class="packet-console-header">
+                        <div class="packet-filter-group">
+                            <label for="packet-filter">Filter</label>
+                            <input type="text" id="packet-filter" placeholder="e.g. IN_GAME CharInfo or !Ping" autocomplete="off">
                         </div>
-                    </article>
-
-                    <!-- WS Statistics -->
-                    <article class="panel">
-                        <header>
-                            <h3><i data-lucide="bar-chart-2"></i> Message Statistics</h3>
-                            <button id="ws-reset-stats" class="secondary small">Reset</button>
-                        </header>
-                        <div class="ws-stats">
-                            <div class="ws-stat-row">
-                                <span class="ws-channel-badge system">System</span>
-                                <span id="ws-count-system" class="ws-count">0</span>
-                            </div>
-                            <div class="ws-stat-row">
-                                <span class="ws-channel-badge character">Character</span>
-                                <span id="ws-count-character" class="ws-count">0</span>
-                            </div>
-                            <div class="ws-stat-row">
-                                <span class="ws-channel-badge combat">Combat</span>
-                                <span id="ws-count-combat" class="ws-count">0</span>
-                            </div>
-                            <div class="ws-stat-row">
-                                <span class="ws-channel-badge chat">Chat</span>
-                                <span id="ws-count-chat" class="ws-count">0</span>
-                            </div>
-                            <div class="ws-stat-row">
-                                <span class="ws-channel-badge world">World</span>
-                                <span id="ws-count-world" class="ws-count">0</span>
-                            </div>
-                            <div class="ws-stat-row total">
-                                <span>Total Messages</span>
-                                <span id="ws-count-total" class="ws-count">0</span>
-                            </div>
-                        </div>
-                    </article>
-                </div>
-
-                <div class="grid">
-                    <!-- Channel Subscriptions -->
-                    <article class="panel">
-                        <header>
-                            <h3><i data-lucide="list"></i> Subscribed Channels</h3>
-                        </header>
-                        <div id="ws-channels" class="ws-channels">
-                            <div class="ws-channel-tag">system</div>
-                            <div class="ws-channel-tag">character</div>
-                            <div class="ws-channel-tag">combat</div>
-                            <div class="ws-channel-tag">world</div>
-                        </div>
-                        <hr>
-                        <div class="ws-subscribe-form">
-                            <input type="text" id="ws-channel-input" placeholder="Enter channel name...">
-                            <button id="ws-subscribe-btn" class="small">Subscribe</button>
-                            <button id="ws-unsubscribe-btn" class="secondary small">Unsubscribe</button>
-                        </div>
-                    </article>
-
-                    <!-- Test Message -->
-                    <article class="panel">
-                        <header>
-                            <h3><i data-lucide="send"></i> Send Test Message</h3>
-                        </header>
-                        <div class="ws-test-form">
-                            <select id="ws-test-type">
-                                <option value="ping">Ping</option>
-                                <option value="subscribe">Subscribe</option>
-                                <option value="unsubscribe">Unsubscribe</option>
-                                <option value="custom">Custom</option>
+                        <div class="packet-filter-group">
+                            <label for="packet-direction">Direction</label>
+                            <select id="packet-direction">
+                                <option value="all">All</option>
+                                <option value="in">Server→Client</option>
+                                <option value="out">Client→Server</option>
                             </select>
-                            <input type="text" id="ws-test-data" placeholder='{"key": "value"}'>
-                            <button id="ws-send-btn" class="small">Send</button>
                         </div>
-                        <small class="ws-hint">Select "Custom" to send JSON data</small>
-                    </article>
-                </div>
-
-                <!-- Raw Message Log -->
-                <article class="panel ws-raw-panel">
-                    <header>
-                        <h3><i data-lucide="terminal"></i> Raw Message Log</h3>
-                        <div class="header-actions">
-                            <label class="ws-toggle">
-                                <input type="checkbox" id="ws-auto-scroll" checked>
+                        <div class="packet-console-actions">
+                            <button id="packet-pause-btn" class="secondary small">
+                                <i data-lucide="pause"></i> <span>Pause</span>
+                            </button>
+                            <button id="packet-clear-btn" class="secondary small">
+                                <i data-lucide="trash-2"></i> Clear
+                            </button>
+                            <label class="packet-autoscroll-label">
+                                <input type="checkbox" id="packet-autoscroll" checked>
                                 <span>Auto-scroll</span>
                             </label>
-                            <select id="ws-raw-filter" class="filter-select small">
-                                <option value="all">All</option>
-                                <option value="in">Inbound</option>
-                                <option value="out">Outbound</option>
-                            </select>
-                            <button id="ws-clear-raw" class="secondary small">Clear</button>
-                        </div>
-                    </header>
-                    <div id="ws-raw-log" class="ws-raw-log">
-                        <div class="ws-raw-entry info">
-                            <span class="ws-raw-time">--:--:--</span>
-                            <span class="ws-raw-direction">[INFO]</span>
-                            <span class="ws-raw-data">WebSocket Monitor initialized. Waiting for connection...</span>
                         </div>
                     </div>
-                </article>
+
+                    <!-- Main Console Area -->
+                    <div id="packet-log" class="packet-log">
+                        <div class="packet-log-empty">
+                            <i data-lucide="terminal"></i>
+                            <p>Packet console ready. Waiting for WebSocket messages...</p>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Status Bar -->
+                    <div class="packet-console-footer">
+                        <div class="packet-status">
+                            <span id="packet-ws-status" class="packet-status-badge disconnected">Disconnected</span>
+                        </div>
+                        <div class="packet-stats">
+                            <span id="packet-showing-count">Showing: 0 / Total: 0</span>
+                            <span id="packet-rate">0 pkt/s</span>
+                        </div>
+                    </div>
+                </div>
             </section>
         </main>
 
@@ -446,6 +334,7 @@
     <script src="/js/components/status-panel.js"></script>
     <script src="/js/components/skills-panel.js"></script>
     <script src="/js/components/inventory-panel.js"></script>
+    <script src="/js/components/packet-console.js"></script>
     <script src="/js/utils/npc-database.js"></script>
     <script src="/js/app.js"></script>
 </body>

@@ -104,6 +104,13 @@ class DashboardApp {
       }
     }
 
+    if (tab === "ws-monitor") {
+      // Force render packet console when switching to WS Monitor tab
+      if (typeof packetConsole !== "undefined") {
+        packetConsole.render();
+      }
+    }
+
     // Re-initialize icons after tab switch
     if (typeof lucide !== "undefined") {
       lucide.createIcons();
@@ -340,22 +347,41 @@ class DashboardApp {
       return;
     }
 
+    // Initialize packet console
+    if (typeof packetConsole !== "undefined") {
+      packetConsole.init();
+    }
+
     wsClient.addEventListener("connected", () => {
       console.log("[DashboardApp] WebSocket connected");
       this.updateConnectionStatus();
+      if (typeof packetConsole !== "undefined") {
+        packetConsole.setWsStatus("connected");
+      }
     });
 
     wsClient.addEventListener("disconnected", () => {
       console.log("[DashboardApp] WebSocket disconnected");
       this.updateConnectionStatus();
+      if (typeof packetConsole !== "undefined") {
+        packetConsole.setWsStatus("disconnected");
+      }
     });
 
     wsClient.addEventListener("error", (e) => {
       console.error("[DashboardApp] WS error:", e.detail);
+      if (typeof packetConsole !== "undefined") {
+        packetConsole.setWsStatus("error", "Connection Error");
+      }
     });
 
-    wsClient.addEventListener("any", () => {
+    wsClient.addEventListener("any", (e) => {
       this.lastWsActivity = Date.now();
+      
+      // Send to packet console
+      if (typeof packetConsole !== "undefined" && e.detail) {
+        packetConsole.onWsMessage(e.detail);
+      }
     });
 
     // System events for connection status
@@ -390,6 +416,11 @@ class DashboardApp {
 
     // Initial connection
     wsClient.connect();
+    
+    // Set initial status
+    if (typeof packetConsole !== "undefined") {
+      packetConsole.setWsStatus("connecting");
+    }
   }
 
   /**

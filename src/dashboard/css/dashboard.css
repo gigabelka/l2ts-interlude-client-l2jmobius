@@ -683,6 +683,320 @@ footer code {
     border-radius: 4px;
 }
 
+/* ========================================
+   Packet Console Styles (WS Monitor)
+   ======================================== */
+
+.packet-console {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 200px);
+    min-height: 500px;
+    background: var(--l2-bg-panel);
+    border: 1px solid var(--l2-border);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+/* Header - Filters */
+.packet-console-header {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--l2-bg-dark);
+    border-bottom: 1px solid var(--l2-border);
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.packet-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.packet-filter-group label {
+    font-size: 0.75rem;
+    color: var(--l2-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.packet-filter-group input[type="text"] {
+    width: 300px;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.packet-filter-group select {
+    min-width: 150px;
+    font-size: 0.9rem;
+}
+
+.packet-console-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-left: auto;
+}
+
+.packet-console-actions button {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.packet-console-actions button i {
+    width: 16px;
+    height: 16px;
+}
+
+.packet-console-actions button.active {
+    background: var(--l2-primary);
+    color: #1a1a1a;
+    border-color: var(--l2-primary);
+}
+
+.packet-autoscroll-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--l2-text);
+    cursor: pointer;
+    margin-left: 0.5rem;
+}
+
+.packet-autoscroll-label input[type="checkbox"] {
+    margin: 0;
+}
+
+/* Main Log Area */
+.packet-log {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    background: #1a1a2e;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.packet-log-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--l2-text-muted);
+    gap: 1rem;
+}
+
+.packet-log-empty i {
+    width: 48px;
+    height: 48px;
+    opacity: 0.3;
+}
+
+/* Packet Rows */
+.packet-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.375rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    white-space: nowrap;
+    transition: background-color 0.1s;
+}
+
+.packet-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.packet-row.even {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.packet-row.even:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.packet-row.expanded {
+    background: rgba(201, 162, 39, 0.1);
+}
+
+/* Direction Styles */
+.packet-row.dir-in {
+    color: #e0e0e0;
+}
+
+.packet-row.dir-out {
+    color: #4ec9b0;
+}
+
+.packet-row .type-error {
+    color: #f48771;
+}
+
+/* Packet Elements */
+.packet-time {
+    color: #858585;
+    font-size: 12px;
+    min-width: 85px;
+    flex-shrink: 0;
+}
+
+.packet-direction {
+    font-weight: bold;
+    min-width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.packet-direction.dir-in {
+    color: #569cd6;
+}
+
+.packet-direction.dir-out {
+    color: #4ec9b0;
+}
+
+.packet-opcode {
+    color: #b5cea8;
+    font-size: 12px;
+    min-width: 45px;
+    flex-shrink: 0;
+    font-family: 'Consolas', monospace;
+}
+
+.packet-type {
+    color: #9cdcfe;
+    font-weight: 500;
+    min-width: 120px;
+    flex-shrink: 0;
+}
+
+.packet-data-preview {
+    color: #ce9178;
+    opacity: 0.8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    font-size: 12px;
+}
+
+/* Highlight matching text */
+.packet-row mark {
+    background: rgba(201, 162, 39, 0.4);
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
+/* Detail Row (expanded JSON) */
+.packet-detail-row {
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid var(--l2-border);
+}
+
+.packet-json {
+    margin: 0;
+    padding: 1rem 1.5rem;
+    color: #d4d4d4;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-x: auto;
+}
+
+/* Footer - Status Bar */
+.packet-console-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: var(--l2-bg-dark);
+    border-top: 1px solid var(--l2-border);
+    font-size: 0.85rem;
+}
+
+.packet-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 0.8rem;
+}
+
+.packet-status-badge::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.packet-status-badge.connected {
+    color: #4caf50;
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.packet-status-badge.disconnected {
+    color: #f44336;
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.packet-status-badge.connecting {
+    color: #ff9800;
+    background: rgba(255, 152, 0, 0.1);
+}
+
+.packet-status-badge.error {
+    color: #f44336;
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.packet-stats {
+    display: flex;
+    gap: 1.5rem;
+    color: var(--l2-text-muted);
+    font-family: 'Consolas', monospace;
+    font-size: 0.8rem;
+}
+
+/* Responsive for Packet Console */
+@media (max-width: 768px) {
+    .packet-console-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .packet-filter-group input[type="text"] {
+        width: 100%;
+    }
+    
+    .packet-console-actions {
+        margin-left: 0;
+        justify-content: flex-end;
+    }
+    
+    .packet-console-footer {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
+    
+    .packet-type {
+        min-width: 80px;
+    }
+    
+    .packet-data-preview {
+        max-width: 150px;
+    }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .quick-actions {
