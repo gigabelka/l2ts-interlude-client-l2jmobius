@@ -95,8 +95,11 @@ interface WsEvent<T = unknown> {
 /**
  * Расширенное событие с поддержкой direction (для пакетов)
  */
-interface WsPacketEvent extends WsEvent<WsPacketMessage> {
+interface WsPacketEvent extends WsEvent<unknown> {
     direction?: 'server_to_client' | 'client_to_server';
+    opcode: number;
+    opcodeHex: string;
+    name: string;
 }
 
 /**
@@ -517,9 +520,13 @@ export class WsApiServer {
             type: 'batch',
             ts: Date.now(),
             events: bufferedPackets.map(packet => ({
-                type: 'server_packet',
+                type: packet.type,
                 ts: packet.timestamp,
-                data: packet,
+                data: packet.data,
+                opcode: packet.opcode,
+                opcodeHex: packet.opcodeHex,
+                name: packet.name,
+                direction: packet.direction,
             })),
         };
 
@@ -533,9 +540,12 @@ export class WsApiServer {
      */
     private broadcastPacket(packet: WsPacketMessage): void {
         const event: WsPacketEvent = {
-            type: 'server_packet',
+            type: packet.type,
             ts: packet.timestamp,
-            data: packet,
+            data: packet.data,
+            opcode: packet.opcode,
+            opcodeHex: packet.opcodeHex,
+            name: packet.name,
             direction: packet.direction,
         };
 

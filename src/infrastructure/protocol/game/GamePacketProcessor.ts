@@ -125,14 +125,22 @@ export class GamePacketProcessor implements IPacketProcessor {
         // Получаем распарсенные данные из пакета если возможно
         let packetData: unknown;
         try {
-            if ('getData' in packet && typeof packet.getData === 'function') {
-                packetData = packet.getData();
+            if ('getData' in packet && typeof (packet as { getData?: unknown }).getData === 'function') {
+                packetData = (packet as { getData: () => unknown }).getData();
             } else {
                 // Если getData недоступен, используем сырые данные
-                packetData = { rawLength: data.length };
+                packetData = { 
+                    rawLength: data.length,
+                    rawHex: data.toString('hex').slice(0, 200)
+                };
             }
-        } catch {
-            packetData = { rawLength: data.length, parseError: true };
+        } catch (err) {
+            packetData = { 
+                rawLength: data.length,
+                rawHex: data.toString('hex').slice(0, 200),
+                parseError: true,
+                errorMessage: err instanceof Error ? err.message : String(err)
+            };
         }
 
         // Отправляем в WS (неблокирующе, с защитой от ошибок)
