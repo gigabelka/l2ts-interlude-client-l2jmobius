@@ -17,6 +17,7 @@ import { getContainer } from '../../config/di/appContainer';
 import { DI_TOKENS } from '../../config/di/Container';
 import type { IEventBus } from '../../application/ports';
 import type { IConnectionRepository } from '../../domain/repositories';
+import { PacketBroadcastService, type WsPacketMessage } from '../../services/PacketBroadcastService';
 
 /**
  * Configuration options for WsServer
@@ -58,6 +59,7 @@ export class WsServerNew {
     private pingInterval: NodeJS.Timeout | null = null;
     private options: WsServerOptions = {};
     private unsubscribeEventBus: (() => void) | null = null;
+    private unsubscribePackets: (() => void) | null = null;
 
     /**
      * Start WebSocket server
@@ -96,6 +98,9 @@ export class WsServerNew {
 
         // Subscribe to EventBus (new architecture)
         this.subscribeToEventBus();
+
+        // Subscribe to PacketBroadcastService for server packets
+        this.subscribeToPackets();
     }
 
     /**
@@ -110,6 +115,33 @@ export class WsServerNew {
         });
 
         this.unsubscribeEventBus = () => subscription.unsubscribe();
+    }
+
+    /**
+     * Subscribe to PacketBroadcastService for server packets
+     */
+    private subscribeToPackets(): void {
+        const packetService = PacketBroadcastService.getInstance();
+
+        const unsubscribe = packetService.subscribe((packet: WsPacketMessage) => {
+            // Send to ALL connected clients (no channel filtering for packets)
+            const message = {
+                type: 'server_packet',
+                channel: 'packets',
+                payload: {
+                    opcode: packet.opcode,
+                    opcodeHex: packet.opcodeHex,
+                    name: packet.name,
+                    data: packet.data,
+                    direction: packet.direction
+                },
+                timestamp: new Date(packet.timestamp)
+            };
+
+            this.broadcast(message);
+        });
+
+        this.unsubscribePackets = unsubscribe;
     }
 
     /**
@@ -189,6 +221,24 @@ export class WsServerNew {
             },
             timestamp: new Date()
         });
+
+        // Send buffered packets from PacketBroadcastService
+        const packetService = PacketBroadcastService.getInstance();
+        const bufferedPackets = packetService.getBufferedPackets();
+        for (const packet of bufferedPackets) {
+            this.sendToClient(client, {
+                type: 'server_packet',
+                channel: 'packets',
+                payload: {
+                    opcode: packet.opcode,
+                    opcodeHex: packet.opcodeHex,
+                    name: packet.name,
+                    data: packet.data,
+                    direction: packet.direction
+                },
+                timestamp: new Date(packet.timestamp)
+            });
+        }
 
         ws.on('message', (data: Buffer) => {
             this.handleMessage(client, data);
@@ -348,6 +398,11 @@ export class WsServerNew {
 
         if (this.unsubscribeEventBus) {
             this.unsubscribeEventBus();
+        }
+
+        if (this.unsubscribePackets) {
+            this.unsubscribePackets();
+            this.unsubscribePackets = null;
         }
 
         this.clients.forEach((client) => {
