@@ -30,18 +30,25 @@ export class MagicSkillUsePacket implements IIncomingPacket {
     private data!: MagicSkillUseData;
 
     decode(reader: IPacketReader): this {
+        // Read mandatory fields (core skill use data)
         const activeCharId = reader.readInt32LE();
         const targetId = reader.readInt32LE();
         const skillId = reader.readInt32LE();
-        const skillLevel = reader.readInt32LE();
-        const hitTime = reader.readInt32LE();
-        const reuseDelay = reader.readInt32LE();
-        const x = reader.readInt32LE();
-        const y = reader.readInt32LE();
-        const z = reader.readInt32LE();
-        const targetX = reader.readInt32LE();
-        const targetY = reader.readInt32LE();
-        const targetZ = reader.readInt32LE();
+
+        // Read optional fields with bounds checking for protocol variations
+        const skillLevel = reader.remaining() >= 4 ? reader.readInt32LE() : 1;
+        const hitTime = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+        const reuseDelay = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+
+        // Read caster position (if available)
+        const x = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+        const y = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+        const z = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+
+        // Read target position (if available)
+        const targetX = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+        const targetY = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
+        const targetZ = reader.remaining() >= 4 ? reader.readInt32LE() : 0;
 
         this.data = {
             activeCharId,

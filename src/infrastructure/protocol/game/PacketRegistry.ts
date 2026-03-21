@@ -286,7 +286,7 @@ const PARSED_PACKETS: PacketConfig[] = [
     { opcode: 0x38, packetClass: TeleportToLocationPacket, description: 'TeleportToLocation - телепорт (альт. опкод)' },
     { opcode: 0x3E, packetClass: ChangeMoveTypePacket, description: 'ChangeMoveType - бег/ходьба (альт. опкод)' },
     { opcode: 0x3F, packetClass: ValidateLocationPacket, description: 'ValidateLocation - валидация позиции' },
-    { opcode: 0x47, packetClass: MagicSkillUsePacket, description: 'MagicSkillUse - использование скилла (альт. опкод)' },
+
     { opcode: 0x48, packetClass: MagicSkillLaunchedPacket, description: 'MagicSkillLaunched - подтверждение запуска скилла' },
     { opcode: 0x54, packetClass: MagicSkillLaunchedPacket, description: 'MagicSkillLaunched - запуск скилла (альт. опкод)' },
     { opcode: 0x60, packetClass: MoveToPawnPacket, description: 'MoveToPawn - следование за целью' },
@@ -378,6 +378,7 @@ const GENERIC_PACKETS: GenericPacketDef[] = [
     { opcode: 0x6E, name: 'ObservationMode', description: 'ObservationMode - режим наблюдения' },
     { opcode: 0x6F, name: 'ObservationReturn', description: 'ObservationReturn - выход из наблюдения' },
     { opcode: 0x70, name: 'HennaInfo', description: 'HennaInfo - информация о татуировках' },
+    { opcode: 0x47, name: 'StopMove', description: 'StopMove - остановка движения' },
     { opcode: 0x71, name: 'HennaItemInfo', description: 'HennaItemInfo - информация о татуировке' },
     { opcode: 0x72, name: 'HennaEquipList', description: 'HennaEquipList - список доступных татуировок' },
     { opcode: 0x73, name: 'HennaItemRemoveList', description: 'HennaItemRemoveList - удаление татуировки' },

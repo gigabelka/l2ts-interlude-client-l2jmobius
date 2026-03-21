@@ -55,7 +55,7 @@ const OPCODE_MAP: Map<number, PacketDefinition> = new Map([
     [0x1E, { name: 'AutoAttackStart', category: 'COMBAT', fields: ['targetObjectId'] }],
     [0x1F, { name: 'AutoAttackStop', category: 'COMBAT', fields: ['targetObjectId'] }],
     [0x29, { name: 'TargetSelected', category: 'COMBAT', fields: ['objectId', 'targetId', 'x', 'y', 'z'] }],
-    [0x47, { name: 'MagicSkillUse', category: 'COMBAT', fields: ['attackerId', 'targetId', 'skillId', 'skillLevel', 'hitTime'] }],
+    [0x47, { name: 'StopMove', category: 'MOVEMENT', fields: ['objectId'] }],
     [0x48, { name: 'MagicSkillLaunched', category: 'COMBAT', fields: ['casterObjectId', 'skillId', 'skillLevel'] }],
     [0x54, { name: 'MagicSkillLaunched', category: 'COMBAT', fields: ['casterObjectId', 'skillId', 'skillLevel'] }],
     [0x76, { name: 'MagicSkillUse', category: 'COMBAT', fields: ['attackerId', 'targetId', 'skillId', 'skillLevel', 'hitTime'] }],
