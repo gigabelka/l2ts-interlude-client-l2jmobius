@@ -179,7 +179,8 @@ export class GameClientNew implements IGameClient {
         switch (this.state) {
             case GameClientState.WAIT_CHAR_SELECTED:
                 if (opcode === 0x04) {
-                    Logger.info('GameClient', 'Server skipped CharSelected (0x15) confirmation. Transitioning to UserInfo.');
+                    const expectedConfirmOpcode = CONFIG.Protocol === 267 ? '0x1D' : '0x15';
+                    Logger.info('GameClient', `Server skipped CharSelected (${expectedConfirmOpcode}) confirmation. Transitioning to UserInfo.`);
                     this.handleCharSelected();
                     this.onUserInfoReceived(opcode);
                 }
@@ -201,8 +202,15 @@ export class GameClientNew implements IGameClient {
         // Handle handshake packets that aren't in the new processor yet
         switch (this.state) {
             case GameClientState.WAIT_CRYPT_INIT: {
-                if (opcode !== 0x00 && opcode !== 0x2D) {
-                    Logger.warn('GameClient', `Expected CryptInit, got 0x${opcode.toString(16)}`);
+                // Check expected opcodes based on protocol version
+                const expectedOpcodes = CONFIG.Protocol === 267
+                    ? [0x2E] // HighFive: CryptInit (REAL OPCODE from server traffic)
+                    : [0x00, 0x2D]; // CT_0_Interlude: CryptInit
+
+                if (!expectedOpcodes.includes(opcode)) {
+                    const protocolName = CONFIG.Protocol === 267 ? 'HighFive' : 'CT_0_Interlude';
+                    const expectedHex = expectedOpcodes.map(op => `0x${op.toString(16)}`).join(', ');
+                    Logger.warn('GameClient', `Expected ${protocolName} CryptInit (${expectedHex}), got 0x${opcode.toString(16)}`);
                     return;
                 }
 
@@ -238,10 +246,16 @@ export class GameClientNew implements IGameClient {
             }
 
             case GameClientState.WAIT_CHAR_LIST: {
-                if (opcode === 0x04 || opcode === 0x13 || opcode === 0x2C) {
+                // Check expected opcodes based on protocol version
+                const expectedOpcodes = CONFIG.Protocol === 267
+                    ? [0x09] // HighFive: CharSelectionInfo
+                    : [0x04, 0x13, 0x2C]; // CT_0_Interlude: CharSelectInfo
+
+                if (expectedOpcodes.includes(opcode)) {
                     // CharSelectInfo received
                     const charCount = body.readUInt32LE(1);
-                    Logger.info('GameClient', `CharSelectInfo received: ${charCount} character(s)`);
+                    const protocolName = CONFIG.Protocol === 267 ? 'HighFive' : 'CT_0_Interlude';
+                    Logger.info('GameClient', `${protocolName} CharSelectInfo received: ${charCount} character(s) [opcode=0x${opcode.toString(16)}]`);
 
                     // Select character
                     Logger.info('GameClient', `Sending CharacterSelect for slot ${CONFIG.CharSlotIndex}...`);
@@ -255,9 +269,14 @@ export class GameClientNew implements IGameClient {
             }
 
             case GameClientState.WAIT_CHAR_SELECTED: {
-                if (opcode === 0x15) {
-                    // CharSelected confirmation
-                    Logger.info('GameClient', 'CharSelected confirmation received');
+                // Check expected opcodes based on protocol version
+                const expectedOpcodes = CONFIG.Protocol === 267
+                    ? [0x1D] // HighFive: CharSelected
+                    : [0x15]; // CT_0_Interlude: CharSelected
+
+                if (expectedOpcodes.includes(opcode)) {
+                    const protocolName = CONFIG.Protocol === 267 ? 'HighFive' : 'CT_0_Interlude';
+                    Logger.info('GameClient', `${protocolName} CharSelected confirmation received [opcode=0x${opcode.toString(16)}]`);
                     this.handleCharSelected();
                 }
                 return;

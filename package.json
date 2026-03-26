@@ -1,6 +1,6 @@
 {
   "name": "l2ts-highfive-client-l2jmobius",
-  "version": "0.4.49",
+  "version": "0.4.50",
   "description": "Headless Lineage 2 HighFive client for L2J Mobius servers",
   "chronicle": "HighFive",
   "protocols": [
