@@ -2,12 +2,15 @@ import { PacketWriter } from '../../../network/PacketWriter';
 import { Logger } from '../../../logger/Logger';
 import { OutgoingGamePacket } from './OutgoingGamePacket';
 import type { SessionData } from '../../../login/types';
+import { CONFIG } from '../../../config';
 
 /**
- * AuthRequest (OpCode=0x08) — request to login to game server for L2J Mobius CT0.
+ * AuthRequest — request to login to game server with session keys.
  *
- * Specific Notes for L2J Mobius CT0 (from client_server_protocol.md):
- * 3. AuthRequest (0x08) sends username in UTF-16LE, playOkId2, playOkId1, loginOkId1, loginOkId2, and language (1)
+ * OpCode: 0x08 for CT_0_Interlude (L2J Mobius specific)
+ *         0x2B for HighFive (standard L2 protocol - AuthLogin)
+ *
+ * Format: username (UTF-16LE null-terminated) + session keys + language
  */
 export class AuthRequest implements OutgoingGamePacket {
     constructor(
@@ -17,14 +20,18 @@ export class AuthRequest implements OutgoingGamePacket {
 
     encode(): Buffer {
         const w = new PacketWriter();
-        w.writeUInt8(0x08); // Opcode for AuthRequest on L2J Mobius CT0
+
+        // Use different opcodes for different protocol versions
+        // CT_0_Interlude (746) uses 0x08, HighFive (267) uses 0x2B (AuthLogin)
+        const opcode = CONFIG.Protocol === 267 ? 0x2B : 0x08;
+        w.writeUInt8(opcode);
 
         // Username in UTF-16LE null-terminated
         const usernameUtf16 = Buffer.from(this.username, 'utf16le');
         w.writeBytes(usernameUtf16);
         w.writeUInt16LE(0); // null terminator
 
-        // Session tokens (SPECIFIC ORDER for L2J Mobius CT0)
+        // Session tokens (same order for both protocols)
         w.writeInt32LE(this.session.playOkId2); // playOkId2 FIRST!
         w.writeInt32LE(this.session.playOkId1); // playOkId1 SECOND
         w.writeInt32LE(this.session.loginOkId1);
@@ -34,9 +41,10 @@ export class AuthRequest implements OutgoingGamePacket {
         w.writeInt32LE(1);
 
         const body = w.toBuffer();
-        Logger.info('AuthRequest', `Sending keys (0x08 Mobius): play2=0x${(this.session.playOkId2 >>> 0).toString(16)}, play1=0x${(this.session.playOkId1 >>> 0).toString(16)}, login1=0x${(this.session.loginOkId1 >>> 0).toString(16)}, login2=0x${(this.session.loginOkId2 >>> 0).toString(16)}`);
-        Logger.logPacket('SEND', 0x08, body);
-        Logger.debug('AuthRequest', `Encoded: bodyLen=${body.length}, username="${this.username}"`);
+        const protocolName = CONFIG.Protocol === 267 ? 'HighFive' : 'CT0_Mobius';
+        Logger.info('AuthRequest', `Sending keys (0x${opcode.toString(16)} ${protocolName}): play2=0x${(this.session.playOkId2 >>> 0).toString(16)}, play1=0x${(this.session.playOkId1 >>> 0).toString(16)}, login1=0x${(this.session.loginOkId1 >>> 0).toString(16)}, login2=0x${(this.session.loginOkId2 >>> 0).toString(16)}`);
+        Logger.logPacket('SEND', opcode, body);
+        Logger.debug('AuthRequest', `Encoded: opcode=0x${opcode.toString(16)}, bodyLen=${body.length}, username="${this.username}"`);
         return body;
     }
 }

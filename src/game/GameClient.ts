@@ -209,7 +209,7 @@ export class GameClientNew implements IGameClient {
                 // Parse CryptInit (23 bytes for L2J_Mobius)
                 // Offset 1: result (1 = success)
                 // Offset 2-9: XOR key (8 bytes)
-                // Offset 10-13: encryption flag (0 = disabled)
+                // Offset 10-13: encryption flag (0 = disabled for CT_0, ignored for HighFive)
                 const result = body[1];
                 if (result !== 1) {
                     Logger.error('GameClient', `ProtocolVersion rejected by server! result=${result}`);
@@ -218,10 +218,16 @@ export class GameClientNew implements IGameClient {
 
                 // Get XOR key and encryption flag
                 const xorKeyData = body.subarray(2, 10);
-                const useEncryption = body.readUInt32LE(10) !== 0;
+                const serverEncryptionFlag = body.readUInt32LE(10) !== 0;
+
+                // For HighFive (protocol 267), always enable encryption regardless of server flag
+                // For CT_0_Interlude (protocol 746), server sent flag=0 to disable encryption
+                const useEncryption = CONFIG.Protocol === 267 ? true : serverEncryptionFlag;
 
                 // Initialize crypto
                 this.crypt.initKey(xorKeyData, useEncryption);
+
+                Logger.info('GameClient', `Encryption: serverFlag=${serverEncryptionFlag}, protocol=${CONFIG.Protocol}, final=${useEncryption}`);
 
                 Logger.info('GameClient', 'Sending AuthLogin (0x08)...');
                 this.sendPacket(new AuthRequest(this.session, CONFIG.Username));
@@ -278,13 +284,21 @@ export class GameClientNew implements IGameClient {
         Logger.logState(this.state, GameClientState.WAIT_USER_INFO);
         this.state = GameClientState.WAIT_USER_INFO;
 
-        // Send EnterWorld sequence
-        this.sendPacketRawBuffer(Buffer.from([0x9D]));
-        this.sendPacketRawBuffer(Buffer.from([0xD0, 0x08, 0x00]));
+        if (CONFIG.Protocol === 267) {
+            // HighFive: Send single standard EnterWorld packet (0x11)
+            Logger.info('GameClient', 'Sending HighFive EnterWorld (0x11)...');
+            const { EnterWorld } = require('./packets/outgoing/EnterWorld');
+            this.sendPacket(new EnterWorld());
+        } else {
+            // CT_0_Interlude: Send special 3-packet sequence
+            Logger.info('GameClient', 'Sending CT_0 EnterWorld sequence (0x9D + 0xD0 0x08 0x00 + 0x03)...');
+            this.sendPacketRawBuffer(Buffer.from([0x9D]));
+            this.sendPacketRawBuffer(Buffer.from([0xD0, 0x08, 0x00]));
 
-        const enterWorldPayload = Buffer.alloc(105, 0);
-        enterWorldPayload[0] = 0x03;
-        this.sendPacketRawBuffer(enterWorldPayload);
+            const enterWorldPayload = Buffer.alloc(105, 0);
+            enterWorldPayload[0] = 0x03;
+            this.sendPacketRawBuffer(enterWorldPayload);
+        }
     }
 
     sendPacket(packet: OutgoingGamePacket): Result<void, Error> {

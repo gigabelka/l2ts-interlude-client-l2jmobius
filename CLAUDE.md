@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **headless Lineage 2 client** for L2J Mobius CT_0_Interlude servers. It connects to a Login Server, authenticates with credentials, selects a character, enters the game world, and maintains a ping/pong keepalive connection.
+This is a **headless Lineage 2 client** for L2J Mobius CT_2.6_HighFive servers. It connects to a Login Server, authenticates with credentials, selects a character, enters the game world, and maintains a ping/pong keepalive connection.
 
-**Target Server:** L2J_Mobius CT_0_Interlude (Protocol 746)
+**Target Server:** L2J_Mobius CT_2.6_HighFive (Protocol 267)
 **Node.js:** 24.14.0
 **Version:** 0.4.9
 
@@ -189,7 +189,7 @@ L2_USERNAME=your_login           # Game account login
 L2_PASSWORD=your_password        # Game account password
 L2_SERVER_ID=2                   # Server ID from server list
 L2_CHAR_SLOT=0                   # Character slot (0-based index)
-L2_PROTOCOL=746                  # Interlude protocol version
+L2_PROTOCOL=267                  # HighFive protocol version
 
 # API
 API_KEY=                         # API authentication key (empty = no auth)

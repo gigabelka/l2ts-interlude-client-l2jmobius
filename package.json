@@ -1,10 +1,10 @@
 {
-  "name": "l2ts-interlude-client-l2jmobius",
-  "version": "0.4.48",
-  "description": "Headless Lineage 2 Interlude client for L2J Mobius servers",
-  "chronicle": "Interlude",
+  "name": "l2ts-highfive-client-l2jmobius",
+  "version": "0.4.49",
+  "description": "Headless Lineage 2 HighFive client for L2J Mobius servers",
+  "chronicle": "HighFive",
   "protocols": [
-    746
+    267
   ],
   "author": "Viktor Belkin",
   "license": "MIT",
@@ -68,6 +68,6 @@
     "packets",
     "bot",
     "l2j",
-    "interlude"
+    "highfive"
   ]
 }

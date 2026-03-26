@@ -81,7 +81,7 @@ function validateServerConfig(): ServerConfig {
     loginIp: process.env["L2_LOGIN_IP"] || "192.168.0.33",
     loginPort: parseInt(process.env["L2_LOGIN_PORT"] || "2106", 10),
     gamePort: parseInt(process.env["L2_GAME_PORT"] || "7777", 10),
-    protocol: parseInt(process.env["L2_PROTOCOL"] || "746", 10),
+    protocol: parseInt(process.env["L2_PROTOCOL"] || "267", 10),
     serverId: parseInt(process.env["L2_SERVER_ID"] || "2", 10),
     charSlotIndex: parseInt(process.env["L2_CHAR_SLOT"] || "0", 10),
   };

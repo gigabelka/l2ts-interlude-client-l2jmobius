@@ -1,6 +1,11 @@
 /**
  * @fileoverview PacketRegistry - автоматическая регистрация пакетов и обработчиков
- * Централизованная конфигурация ВСЕХ игровых пакетов L2J Mobius CT0 Interlude
+ * Централизованная конфигурация ВСЕХ игровых пакетов L2J Mobius
+ *
+ * COMPATIBILITY NOTE: Currently configured for CT_0_Interlude (protocol 746).
+ * For HighFive (protocol 267), some opcodes may need adjustment after testing.
+ * Most server-to-client opcodes are typically stable between L2J Mobius versions.
+ *
  * @module infrastructure/protocol/game
  */
 
@@ -98,9 +103,12 @@ interface PacketConfig {
 // =====================================================================
 // РАЗДЕЛ 1: Пакеты с полными обработчиками (handler + parser)
 // Обновляют GameState через handlers и EventBus
+//
+// NOTE: Opcodes configured for L2J Mobius CT_0_Interlude (protocol 746).
+// For HighFive (protocol 267), verification needed during testing.
 // =====================================================================
 const HANDLED_PACKETS: PacketConfig[] = [
-    // ---- MoveToLocation (0x01) — основной опкод L2J Mobius CT0 ----
+    // ---- MoveToLocation (0x01) — L2J Mobius opcode ----
     {
         opcode: 0x01,
         packetClass: MoveToLocationPacket,
